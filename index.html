@@ -3,13 +3,13 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Head Pursuit Trainer + Calibration (Quest) — Fixed Origin</title>
+  <title>Head Pursuit Trainer + Calibration (Quest) — Curves + Trail</title>
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
   <style>
     body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background:#050816; }
     .panel {
       position: fixed; left: 12px; top: 12px; z-index: 30;
-      width: min(520px, calc(100vw - 24px));
+      width: min(560px, calc(100vw - 24px));
       background: rgba(0,0,0,0.72); color: #fff;
       padding: 12px 12px 10px; border-radius: 12px;
       box-shadow: 0 10px 30px rgba(0,0,0,0.35);
@@ -21,7 +21,7 @@
     .row { display:flex; gap:10px; align-items:center; margin: 8px 0; }
     .row label { flex: 1 1 auto; font-size: 13px; opacity: 0.95; }
     .row input[type="range"] { flex: 1 1 220px; }
-    .row output { width: 74px; text-align:right; font-variant-numeric: tabular-nums; opacity:0.95; }
+    .row output { width: 78px; text-align:right; font-variant-numeric: tabular-nums; opacity:0.95; }
     button, select {
       width: 100%; border-radius: 10px; border: 1px solid rgba(255,255,255,0.18);
       background: rgba(255,255,255,0.10); color: #fff; padding: 10px 10px;
@@ -47,14 +47,14 @@
   <div class="panel" id="ui">
     <div class="title">Head Pursuit Trainer — Calibration + Re-test</div>
     <div class="mini">
-      Quest fix included: target motion is now defined relative to your <b>neutral head direction</b>, so it stays in front of you.
-      Set Neutral while looking straight ahead (comfortable posture).
+      Updates: immersive starfield, curved motion arcs, smoother easing, and a proper polyline trail.<br/>
+      (Quest Stationary supported via <code>referenceSpaceType: local-floor</code>.)
     </div>
 
     <div class="grid">
       <div class="box">
         <div class="mini" style="margin-bottom:6px;"><b>Live angles (relative to neutral)</b></div>
-        <div class="kv" id="liveKV">
+        <div class="kv">
           <div>Yaw (°)</div><div id="liveYaw">0.0</div>
           <div>Pitch (°)</div><div id="livePitch">0.0</div>
           <div>Roll (°)</div><div id="liveRoll">0.0</div>
@@ -62,7 +62,7 @@
       </div>
 
       <div class="box">
-        <div class="mini" style="margin-bottom:6px;"><b>Calibration status</b></div>
+        <div class="mini" style="margin-bottom:6px;"><b>Status</b></div>
         <div class="mini" id="calStatus">Not started.</div>
         <div class="hr"></div>
         <div class="kv">
@@ -83,20 +83,20 @@
         <div class="mini" style="margin-bottom:6px;">Mode</div>
         <select id="mode">
           <option value="cycle" selected>cycle (drift → circle → figure8 → jumps)</option>
-          <option value="drift">drift (smooth random)</option>
-          <option value="circle">circle</option>
-          <option value="figure8">figure-8</option>
-          <option value="jumps">jumps (hold → jump)</option>
+          <option value="drift">drift (curved random)</option>
+          <option value="circle">circle (smooth)</option>
+          <option value="figure8">figure-8 (smooth)</option>
+          <option value="jumps">jumps (curved, with holds)</option>
         </select>
       </div>
 
       <div>
         <div class="mini" style="margin-bottom:6px;">Speed</div>
         <select id="speed">
-          <option value="0.14">Very gentle</option>
-          <option value="0.20">Gentle</option>
-          <option value="0.28" selected>Medium</option>
-          <option value="0.34">Brisk</option>
+          <option value="0.12">Very gentle</option>
+          <option value="0.18">Gentle</option>
+          <option value="0.24" selected>Medium</option>
+          <option value="0.30">Brisk</option>
         </select>
       </div>
 
@@ -137,12 +137,12 @@
 
   <script>
     /***********************
-     * Helper math
+     * Utility
      ************************/
     const rad2deg = r => r * 180 / Math.PI;
     const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+    const smoothstep = (t) => t * t * (3 - 2 * t); // 0..1 easing
 
-    // Extract yaw/pitch/roll (in degrees) from camera orientation, relative to neutral quaternion.
     function getRelativeYPRDeg(cameraObj3D, qNeutral) {
       const qCur = cameraObj3D.quaternion.clone();
       const qRel = qNeutral.clone().invert().multiply(qCur); // neutral^-1 * current
@@ -151,234 +151,421 @@
     }
 
     /***********************
-     * Pursuit component
-     * Key fix: apply window.qNeutral to the target motion vector
-     * so the whole motion cone is anchored to your neutral gaze direction.
+     * Immersive starfield background (no external libs)
      ************************/
-    
+    AFRAME.registerComponent('starfield', {
+      schema: {
+        count: { type: 'int', default: 1000 },
+        radius: { type: 'number', default: 70 },
+        size:   { type: 'number', default: 0.06 }
+      },
+      init: function () {
+        const d = this.data;
+        const positions = new Float32Array(d.count * 3);
+
+        // Distribute points on/near a sphere around the user
+        for (let i = 0; i < d.count; i++) {
+          const u = Math.random();
+          const v = Math.random();
+          const theta = 2 * Math.PI * u;
+          const phi = Math.acos(2 * v - 1);
+          const r = d.radius * (0.85 + 0.15 * Math.random());
+
+          const x = r * Math.sin(phi) * Math.cos(theta);
+          const y = r * Math.cos(phi);
+          const z = r * Math.sin(phi) * Math.sin(theta);
+
+          positions[i*3+0] = x;
+          positions[i*3+1] = y;
+          positions[i*3+2] = z;
+        }
+
+        const geom = new THREE.BufferGeometry();
+        geom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        const mat = new THREE.PointsMaterial({
+          size: d.size,
+          sizeAttenuation: true,
+          color: 0xffffff,
+          transparent: true,
+          opacity: 0.55
+        });
+
+        const pts = new THREE.Points(geom, mat);
+        this.el.setObject3D('mesh', pts);
+      }
+    });
+
+    /***********************
+     * Pursuit with:
+     * - motion defined in a cone in front of neutral gaze
+     * - curved arcs between targets (CatmullRom)
+     * - smooth ease-in/out along curve
+     * - proper polyline trail (BufferGeometry)
+     ************************/
     AFRAME.registerComponent('pursuit3axis', {
-  schema: {
-    mode: { type: 'string', default: 'cycle' },
-    cycleOrder: { type: 'string', default: 'drift,circle,figure8,jumps' },
-    cycleMinSec: { type: 'number', default: 35 },
-    cycleMaxSec: { type: 'number', default: 55 },
+      schema: {
+        mode: { type: 'string', default: 'cycle' },
+        cycleOrder: { type: 'string', default: 'drift,circle,figure8,jumps' },
+        cycleMinSec: { type: 'number', default: 35 },
+        cycleMaxSec: { type: 'number', default: 55 },
 
-    yawRangeDeg:   { type: 'number', default: 25 },
-    pitchRangeDeg: { type: 'number', default: 15 },
-    rollRangeDeg:  { type: 'number', default: 10 },
-    distMin:       { type: 'number', default: 1.2 },
-    distMax:       { type: 'number', default: 2.2 },
+        yawRangeDeg:   { type: 'number', default: 25 },
+        pitchRangeDeg: { type: 'number', default: 15 },
+        rollRangeDeg:  { type: 'number', default: 10 },
+        distMin:       { type: 'number', default: 1.2 },
+        distMax:       { type: 'number', default: 2.2 },
 
-    speed:   { type: 'number', default: 0.22 },
-    smooth:  { type: 'number', default: 0.14 },
-    holdMin: { type: 'number', default: 0.35 },
-    holdMax: { type: 'number', default: 1.10 },
+        speed:   { type: 'number', default: 0.20 }, // units/sec along arc
+        holdMin: { type: 'number', default: 0.45 }, // holds mainly affect jumps
+        holdMax: { type: 'number', default: 1.20 },
 
-    circlePeriodSec: { type: 'number', default: 10.0 },
-    fig8PeriodSec:   { type: 'number', default: 12.0 },
+        circlePeriodSec: { type: 'number', default: 11.0 },
+        fig8PeriodSec:   { type: 'number', default: 13.0 },
 
-    jumpAmplitude: { type: 'number', default: 0.7 }
-  },
+        jumpAmplitude: { type: 'number', default: 0.7 },
 
-  init: function () {
-    this.cur = new THREE.Vector3();
-    this.dest = new THREE.Vector3();
-    this.tmp = new THREE.Vector3();
+        // Curvature: bigger = more arced paths, smaller = flatter
+        arcBulge: { type: 'number', default: 0.35 },
 
-    // NEW: anchor star to head position
-    this.cameraEl = document.querySelector('a-camera');
-    this.origin = new THREE.Vector3();
+        // Trail
+        trailPoints: { type: 'int', default: 90 },   // number of points in trail
+        trailEveryNFrames: { type: 'int', default: 1 } // 1 = every frame; 2 = every other frame, etc.
+      },
 
-    this._t = 0;
-    this._hold = 0;
-    this._mode = 'drift';
-    this._cycleLeft = 0;
-    this._cycleIdx = 0;
-    this._cycle = this.data.cycleOrder.split(',').map(s => s.trim()).filter(Boolean);
-    this._rollRad = 0;
-    this._dist = 1.6;
+      init: function () {
+        // Local offset in "head-relative" space (but expressed in world after neutral rotation)
+        this.cur = new THREE.Vector3();
+        this.dest = new THREE.Vector3();
 
-    this._resolveMode(true);
-    this._snapToInitial();
-  },
+        // Curve traversal
+        this.path = null;     // THREE.CatmullRomCurve3
+        this.pathT = 0;       // 0..1
+        this.pathLen = 1;
+        this.p0 = new THREE.Vector3();
+        this.p1 = new THREE.Vector3();
+        this.p2 = new THREE.Vector3();
 
-  update: function () {
-    this._cycle = this.data.cycleOrder.split(',').map(s => s.trim()).filter(Boolean);
-    if (!this._cycle.length) this._cycle = ['drift','circle','figure8','jumps'];
-    this._resolveMode(false);
-  },
-
-  _rand: function (a, b) { return a + Math.random() * (b - a); },
-
-  _pickEnvelopePoint: function (amp = 1.0) {
-    const d = this.data;
-    const yaw   = THREE.MathUtils.degToRad((Math.random()*2 - 1) * d.yawRangeDeg   * amp);
-    const pitch = THREE.MathUtils.degToRad((Math.random()*2 - 1) * d.pitchRangeDeg * amp);
-    const dist  = this._rand(d.distMin, d.distMax);
-
-    const x = Math.tan(yaw) * dist;
-    const y = Math.tan(pitch) * dist;
-    const z = -dist;
-    return { x, y, z };
-  },
-
-  _applyRollAndNeutral: function (v, rollRad) {
-    const m = new THREE.Matrix4().makeRotationZ(rollRad);
-    v.applyMatrix4(m);
-
-    if (window.qNeutral) {
-      v.applyQuaternion(window.qNeutral);
-    }
-    return v;
-  },
-
-  _place: function () {
-    // NEW: convert local offset (this.cur) into world position at the head
-    if (this.cameraEl) {
-      this.cameraEl.object3D.getWorldPosition(this.origin);
-      this.el.object3D.position.copy(this.origin).add(this.cur);
-    } else {
-      this.el.object3D.position.copy(this.cur);
-    }
-  },
-
-  _newRollAndDist: function () {
-    const d = this.data;
-    this._rollRad = THREE.MathUtils.degToRad((Math.random()*2 - 1) * d.rollRangeDeg);
-    this._dist = this._rand(d.distMin, d.distMax);
-  },
-
-  _resolveMode: function (forceReset) {
-    const d = this.data;
-    const requested = (d.mode || 'cycle').toLowerCase();
-
-    if (requested === 'cycle') {
-      if (forceReset || !this._cycleLeft || !this._cycle.length) {
-        this._cycleIdx = this._cycleIdx % this._cycle.length;
-        this._mode = this._cycle[this._cycleIdx] || 'drift';
-        this._cycleLeft = this._rand(d.cycleMinSec, d.cycleMaxSec);
-        this._newRollAndDist();
-      }
-    } else {
-      this._mode = requested;
-      if (forceReset) {
-        this._newRollAndDist();
+        // State
+        this._t = 0;
+        this._hold = 0;
+        this._mode = 'drift';
         this._cycleLeft = 0;
+        this._cycleIdx = 0;
+        this._cycle = this.data.cycleOrder.split(',').map(s => s.trim()).filter(Boolean);
+
+        this._rollRad = 0;
+        this._dist = 1.6;
+
+        // Anchoring + head origin
+        this.cameraEl = document.querySelector('a-camera');
+        this.origin = new THREE.Vector3();
+
+        // Trail renderer
+        this._trailFrame = 0;
+        this._trailIndex = 0;
+        this._trailCount = 0;
+
+        const maxPts = Math.max(10, this.data.trailPoints | 0);
+        this._trailMax = maxPts;
+        this._trailPositions = new Float32Array(maxPts * 3);
+
+        this._trailGeom = new THREE.BufferGeometry();
+        this._trailGeom.setAttribute('position', new THREE.BufferAttribute(this._trailPositions, 3));
+        this._trailGeom.setDrawRange(0, 0);
+
+        this._trailMat = new THREE.LineBasicMaterial({
+          color: 0xffffff,
+          transparent: true,
+          opacity: 0.35
+        });
+
+        this._trailLine = new THREE.Line(this._trailGeom, this._trailMat);
+
+        // Attach the trail to a dedicated entity if present; otherwise attach to scene
+        const trailEl = document.querySelector('#trail');
+        if (trailEl) {
+          trailEl.setObject3D('mesh', this._trailLine);
+        } else if (this.el.sceneEl) {
+          this.el.sceneEl.object3D.add(this._trailLine);
+        }
+
+        this._resolveMode(true);
+        this._snapToInitial();
+      },
+
+      update: function () {
+        this._cycle = this.data.cycleOrder.split(',').map(s => s.trim()).filter(Boolean);
+        if (!this._cycle.length) this._cycle = ['drift','circle','figure8','jumps'];
+      },
+
+      remove: function () {
+        if (this._trailLine) {
+          const trailEl = document.querySelector('#trail');
+          if (trailEl) {
+            trailEl.removeObject3D('mesh');
+          } else if (this.el.sceneEl) {
+            this.el.sceneEl.object3D.remove(this._trailLine);
+          }
+        }
+      },
+
+      _rand: function (a, b) { return a + Math.random() * (b - a); },
+
+      _pickEnvelopePoint: function (amp = 1.0) {
+        const d = this.data;
+        const yaw   = THREE.MathUtils.degToRad((Math.random()*2 - 1) * d.yawRangeDeg   * amp);
+        const pitch = THREE.MathUtils.degToRad((Math.random()*2 - 1) * d.pitchRangeDeg * amp);
+        const dist  = this._rand(d.distMin, d.distMax);
+
+        // forward is -Z
+        const x = Math.tan(yaw)   * dist;
+        const y = Math.tan(pitch) * dist;
+        const z = -dist;
+        return new THREE.Vector3(x, y, z);
+      },
+
+      _applyRollAndNeutral: function (v, rollRad) {
+        // Roll rotates the motion plane around forward axis (Z in our local basis)
+        const m = new THREE.Matrix4().makeRotationZ(rollRad);
+        v.applyMatrix4(m);
+
+        // Rotate the whole cone to align with neutral gaze direction
+        if (window.qNeutral) v.applyQuaternion(window.qNeutral);
+        return v;
+      },
+
+      _getHeadWorldPosition: function () {
+        // With local-floor this is usually correct; keep simple.
+        if (this.cameraEl) this.cameraEl.object3D.getWorldPosition(this.origin);
+        else this.origin.set(0, 0, 0);
+        return this.origin;
+      },
+
+      _placeStar: function () {
+        const head = this._getHeadWorldPosition();
+        this.el.object3D.position.copy(head).add(this.cur);
+      },
+
+      _pushTrailPoint: function () {
+        this._trailFrame++;
+        const every = Math.max(1, this.data.trailEveryNFrames | 0);
+        if ((this._trailFrame % every) !== 0) return;
+
+        const p = this.el.object3D.position;
+
+        const i = this._trailIndex;
+        this._trailPositions[i*3+0] = p.x;
+        this._trailPositions[i*3+1] = p.y;
+        this._trailPositions[i*3+2] = p.z;
+
+        this._trailIndex = (i + 1) % this._trailMax;
+        this._trailCount = Math.min(this._trailCount + 1, this._trailMax);
+
+        // Reorder into a contiguous polyline (oldest -> newest)
+        // For maxPts <= ~120 this is cheap and looks best.
+        const tmp = this._trailPositions;
+        const reordered = new Float32Array(this._trailCount * 3);
+
+        const start = (this._trailIndex - this._trailCount + this._trailMax) % this._trailMax;
+        for (let k = 0; k < this._trailCount; k++) {
+          const src = (start + k) % this._trailMax;
+          reordered[k*3+0] = tmp[src*3+0];
+          reordered[k*3+1] = tmp[src*3+1];
+          reordered[k*3+2] = tmp[src*3+2];
+        }
+
+        // Update geometry
+        this._trailGeom.setAttribute('position', new THREE.BufferAttribute(reordered, 3));
+        this._trailGeom.setDrawRange(0, this._trailCount);
+        this._trailGeom.attributes.position.needsUpdate = true;
+      },
+
+      _newRollAndDist: function () {
+        const d = this.data;
+        this._rollRad = THREE.MathUtils.degToRad((Math.random()*2 - 1) * d.rollRangeDeg);
+        this._dist = this._rand(d.distMin, d.distMax);
+      },
+
+      _resolveMode: function (forceReset) {
+        const d = this.data;
+        const requested = (d.mode || 'cycle').toLowerCase();
+
+        if (requested === 'cycle') {
+          if (forceReset || !this._cycleLeft || !this._cycle.length) {
+            this._cycleIdx = this._cycleIdx % this._cycle.length;
+            this._mode = this._cycle[this._cycleIdx] || 'drift';
+            this._cycleLeft = this._rand(d.cycleMinSec, d.cycleMaxSec);
+            this._newRollAndDist();
+          }
+        } else {
+          this._mode = requested;
+          if (forceReset) {
+            this._cycleLeft = 0;
+            this._newRollAndDist();
+          }
+        }
+      },
+
+      _advanceCycleIfNeeded: function (dt) {
+        const d = this.data;
+        if ((d.mode || 'cycle').toLowerCase() !== 'cycle') return;
+
+        this._cycleLeft -= dt;
+        if (this._cycleLeft <= 0) {
+          this._cycleIdx = (this._cycleIdx + 1) % this._cycle.length;
+          this._mode = this._cycle[this._cycleIdx] || 'drift';
+          this._cycleLeft = this._rand(d.cycleMinSec, d.cycleMaxSec);
+          this._t = 0;
+          this._hold = 0;
+          this._newRollAndDist();
+
+          // start a fresh arc immediately
+          this._pickNewDest(true);
+        }
+      },
+
+      _buildArcTo: function (next) {
+        const d = this.data;
+
+        this.p0.copy(this.cur);
+        this.p1.copy(next);
+
+        const mid = this.p0.clone().add(this.p1).multiplyScalar(0.5);
+        const segLen = this.p1.clone().sub(this.p0).length();
+
+        // Create a stable perpendicular bulge direction
+        const up = new THREE.Vector3(0, 1, 0);
+        const dir = this.p1.clone().sub(this.p0).normalize();
+        let perp = new THREE.Vector3().crossVectors(dir, up);
+        if (perp.lengthSq() < 1e-6) perp = new THREE.Vector3(1, 0, 0);
+        perp.normalize();
+
+        const bulge = segLen * clamp(d.arcBulge, 0.05, 0.9);
+        perp.multiplyScalar(bulge);
+
+        this.p2.copy(mid).add(perp);
+
+        this.path = new THREE.CatmullRomCurve3([this.p0, this.p2, this.p1]);
+        this.pathT = 0;
+
+        // Cache length for consistent speed
+        this.pathLen = Math.max(0.001, this.path.getLength());
+      },
+
+      _pickNewDest: function (snap) {
+        const d = this.data;
+        const amp = (this._mode === 'jumps') ? d.jumpAmplitude : 1.0;
+
+        // Segment-stable roll for the next arc
+        this._rollRad = THREE.MathUtils.degToRad((Math.random()*2 - 1) * d.rollRangeDeg);
+
+        const local = this._pickEnvelopePoint(amp);
+        const next = this._applyRollAndNeutral(local, this._rollRad);
+
+        this.dest.copy(next);
+        this._hold = this._rand(d.holdMin, d.holdMax);
+
+        if (snap) {
+          this.cur.copy(this.dest);
+          this._placeStar();
+          this._pushTrailPoint();
+          // Start from here with a new next arc
+          const local2 = this._pickEnvelopePoint(amp);
+          const next2 = this._applyRollAndNeutral(local2, this._rollRad);
+          this.dest.copy(next2);
+        }
+
+        this._buildArcTo(this.dest);
+      },
+
+      _snapToInitial: function () {
+        this._t = 0;
+        this._hold = 0;
+
+        this._newRollAndDist();
+
+        // Start straight ahead at distance, aligned with neutral gaze
+        const v0 = this._applyRollAndNeutral(new THREE.Vector3(0, 0, -this._dist), 0);
+        this.cur.copy(v0);
+
+        this._placeStar();
+        this._pushTrailPoint();
+
+        // Begin with a first arc
+        this._pickNewDest(false);
+      },
+
+      tick: function (time, timeDelta) {
+        const d = this.data;
+        const dt = Math.min(timeDelta / 1000, 0.05);
+
+        this._resolveMode(false);
+        this._advanceCycleIfNeeded(dt);
+        this._t += dt;
+
+        // Predictable paths (still aligned to neutral with roll)
+        if (this._mode === 'circle') {
+          const period = Math.max(4.0, d.circlePeriodSec);
+          const w = (2 * Math.PI) / period;
+
+          const yawMax   = THREE.MathUtils.degToRad(d.yawRangeDeg);
+          const pitchMax = THREE.MathUtils.degToRad(d.pitchRangeDeg);
+          const rx = Math.tan(yawMax) * this._dist;
+          const ry = Math.tan(pitchMax) * this._dist;
+
+          const a = w * this._t;
+          const v = this._applyRollAndNeutral(new THREE.Vector3(rx * Math.cos(a), ry * Math.sin(a), -this._dist), this._rollRad);
+
+          this.cur.copy(v);
+          this._placeStar();
+          this._pushTrailPoint();
+          return;
+        }
+
+        if (this._mode === 'figure8') {
+          const period = Math.max(5.0, d.fig8PeriodSec);
+          const w = (2 * Math.PI) / period;
+
+          const yawMax   = THREE.MathUtils.degToRad(d.yawRangeDeg);
+          const pitchMax = THREE.MathUtils.degToRad(d.pitchRangeDeg);
+          const rx = Math.tan(yawMax) * this._dist;
+          const ry = Math.tan(pitchMax) * this._dist;
+
+          const a = w * this._t;
+          const v = this._applyRollAndNeutral(new THREE.Vector3(rx * Math.sin(a), ry * 0.5 * Math.sin(2 * a), -this._dist), this._rollRad);
+
+          this.cur.copy(v);
+          this._placeStar();
+          this._pushTrailPoint();
+          return;
+        }
+
+        // Drift/Jumps use curved arcs with easing
+        if (!this.path) this._pickNewDest(false);
+
+        // If close to end of arc: hold briefly (especially for jumps), then new arc
+        if (this.pathT >= 1.0) {
+          this._hold -= dt;
+          if (this._hold <= 0) this._pickNewDest(false);
+          this._placeStar();
+          this._pushTrailPoint();
+          return;
+        }
+
+        // Advance along curve by speed (units/sec) normalized by curve length
+        const dT = (Math.max(0.01, d.speed) * dt) / this.pathLen;
+        this.pathT = Math.min(1.0, this.pathT + dT);
+
+        // Ease-in/out along the arc (reduces “snappy acceleration” feel)
+        const te = smoothstep(this.pathT);
+        const pos = this.path.getPoint(te);
+
+        this.cur.copy(pos);
+        this._placeStar();
+        this._pushTrailPoint();
       }
-    }
-  },
+    });
 
-  _advanceCycleIfNeeded: function (dt) {
-    const d = this.data;
-    if ((d.mode || 'cycle').toLowerCase() !== 'cycle') return;
-
-    this._cycleLeft -= dt;
-    if (this._cycleLeft <= 0) {
-      this._cycleIdx = (this._cycleIdx + 1) % this._cycle.length;
-      this._mode = this._cycle[this._cycleIdx] || 'drift';
-      this._cycleLeft = this._rand(d.cycleMinSec, d.cycleMaxSec);
-      this._t = 0;
-      this._hold = 0;
-      this._newRollAndDist();
-      if (this._mode === 'drift' || this._mode === 'jumps') this._pickNewDest(true);
-    }
-  },
-
-  _pickNewDest: function (snap) {
-    const d = this.data;
-    const amp = (this._mode === 'jumps') ? d.jumpAmplitude : 1.0;
-    const p = this._pickEnvelopePoint(amp);
-
-    this._rollRad = THREE.MathUtils.degToRad((Math.random()*2 - 1) * d.rollRangeDeg);
-
-    const v = new THREE.Vector3(p.x, p.y, p.z);
-    this.dest.copy(this._applyRollAndNeutral(v, this._rollRad));
-    this._hold = this._rand(d.holdMin, d.holdMax);
-
-    if (snap) {
-      this.cur.copy(this.dest);
-      this._place();
-    }
-  },
-
-  _snapToInitial: function () {
-    this._t = 0;
-    this._hold = 0;
-
-    this._newRollAndDist();
-    const v0 = new THREE.Vector3(0, 0, -this._dist);
-    this.cur.copy(this._applyRollAndNeutral(v0, 0));
-    this._place();
-
-    if (this._mode === 'drift' || this._mode === 'jumps') {
-      this._pickNewDest(false);
-    }
-  },
-
-  tick: function (time, timeDelta) {
-    const d = this.data;
-    const dt = Math.min(timeDelta / 1000, 0.05);
-
-    this._resolveMode(false);
-    this._advanceCycleIfNeeded(dt);
-    this._t += dt;
-
-    if (this._mode === 'circle') {
-      const period = Math.max(4.0, d.circlePeriodSec);
-      const w = (2 * Math.PI) / period;
-
-      const yawMax   = THREE.MathUtils.degToRad(d.yawRangeDeg);
-      const pitchMax = THREE.MathUtils.degToRad(d.pitchRangeDeg);
-      const rx = Math.tan(yawMax) * this._dist;
-      const ry = Math.tan(pitchMax) * this._dist;
-
-      const a = w * this._t;
-      const v = new THREE.Vector3(rx * Math.cos(a), ry * Math.sin(a), -this._dist);
-
-      this.dest.copy(this._applyRollAndNeutral(v, this._rollRad));
-      this.cur.lerp(this.dest, d.smooth);
-      this._place();
-      return;
-    }
-
-    if (this._mode === 'figure8') {
-      const period = Math.max(5.0, d.fig8PeriodSec);
-      const w = (2 * Math.PI) / period;
-
-      const yawMax   = THREE.MathUtils.degToRad(d.yawRangeDeg);
-      const pitchMax = THREE.MathUtils.degToRad(d.pitchRangeDeg);
-      const rx = Math.tan(yawMax) * this._dist;
-      const ry = Math.tan(pitchMax) * this._dist;
-
-      const a = w * this._t;
-      const v = new THREE.Vector3(rx * Math.sin(a), ry * 0.5 * Math.sin(2 * a), -this._dist);
-
-      this.dest.copy(this._applyRollAndNeutral(v, this._rollRad));
-      this.cur.lerp(this.dest, d.smooth);
-      this._place();
-      return;
-    }
-
-    const distToDest = this.cur.distanceTo(this.dest);
-    if (distToDest < 0.03) {
-      this._hold -= dt;
-      if (this._hold <= 0) this._pickNewDest(false);
-      return;
-    }
-
-    const step = Math.max(0.01, d.speed) * dt;
-    this.tmp.copy(this.dest).sub(this.cur);
-    const len = this.tmp.length();
-    if (len > 0) this.tmp.multiplyScalar(Math.min(step / len, 1));
-    this.cur.add(this.tmp);
-
-    if (d.smooth > 0) this.cur.lerp(this.dest, d.smooth * 0.25);
-    this._place();
-  }
-});
-    
-     
-   
     /***********************
      * UI + Calibration logic
      ************************/
@@ -402,13 +589,10 @@
     const btnRetest = $('btnRetest');
     const btnClear = $('btnClear');
 
-    const STORAGE_KEY = 'pursuit3axis_rom_v2';
+    const STORAGE_KEY = 'pursuit3axis_rom_v3';
 
-    // Neutral quaternion (camera orientation at neutral)
     let qNeutral = new THREE.Quaternion();
     let neutralCaptured = false;
-
-    // Expose to pursuit component (used to rotate the motion cone)
     window.qNeutral = null;
 
     let baseline = null;
@@ -436,7 +620,7 @@
           romYawEl.textContent = fmtDeg(baseline.yawROM);
           romPitchEl.textContent = fmtDeg(baseline.pitchROM);
           romRollEl.textContent = fmtDeg(baseline.rollROM);
-          calStatus.textContent = 'Baseline ROM loaded (saved). Set Neutral to proceed.';
+          calStatus.textContent = 'Baseline ROM loaded. Set Neutral to proceed.';
         }
       } catch {}
     }
@@ -458,10 +642,7 @@
     }
 
     function updateResultsUI() {
-      if (!baseline && !retest) {
-        resultsEl.textContent = 'No results yet.';
-        return;
-      }
+      if (!baseline && !retest) { resultsEl.textContent = 'No results yet.'; return; }
       if (baseline && !retest) {
         resultsEl.innerHTML =
           `Baseline (${new Date(baseline.timestamp).toLocaleString()}): ` +
@@ -480,8 +661,7 @@
           `<div>Re-test (${new Date(retest.timestamp).toLocaleString()}): ` +
           `Yaw ${fmtDeg(retest.yawROM)} | Pitch ${fmtDeg(retest.pitchROM)} | Roll ${fmtDeg(retest.rollROM)}</div>` +
           `<div><b>Change:</b> ` +
-          `Yaw ${sign(dYaw)}${fmtDeg(dYaw)} | Pitch ${sign(dPitch)}${fmtDeg(dPitch)} | Roll ${sign(dRoll)}${fmtDeg(dRoll)}</div>` +
-          `<div class="mini" style="margin-top:6px;opacity:0.85;">Short-term changes can reflect warm-up/guarding differences.</div>`;
+          `Yaw ${sign(dYaw)}${fmtDeg(dYaw)} | Pitch ${sign(dPitch)}${fmtDeg(dPitch)} | Roll ${sign(dRoll)}${fmtDeg(dRoll)}</div>`;
       }
     }
 
@@ -493,14 +673,10 @@
     function setNeutral() {
       const camObj = getCameraObj();
       if (!camObj) { calStatus.textContent = 'Camera not ready yet.'; return; }
-
       qNeutral.copy(camObj.quaternion);
       neutralCaptured = true;
       neutralSetEl.textContent = 'Yes';
-
-      // expose globally for target motion anchoring
-      window.qNeutral = qNeutral.clone();
-
+      window.qNeutral = qNeutral.clone(); // used by pursuit component
       calStatus.textContent = 'Neutral set. Now calibrate ROM.';
       btnStartCal.disabled = false;
     }
@@ -542,10 +718,7 @@
       const pitchROM = Math.abs(extremes.pitchMax - extremes.pitchMin);
       const rollROM = Math.abs(extremes.rollMax - extremes.rollMin);
 
-      const romObj = {
-        yawROM, pitchROM, rollROM,
-        timestamp: Date.now()
-      };
+      const romObj = { yawROM, pitchROM, rollROM, timestamp: Date.now() };
 
       romYawEl.textContent = fmtDeg(romObj.yawROM);
       romPitchEl.textContent = fmtDeg(romObj.pitchROM);
@@ -594,12 +767,14 @@
         `distMin: 1.2`,
         `distMax: 2.2`,
         `speed: ${speed}`,
-        `smooth: 0.14`,
-        `holdMin: 0.35`,
-        `holdMax: 1.10`,
-        `circlePeriodSec: 10.0`,
-        `fig8PeriodSec: 12.0`,
-        `jumpAmplitude: ${jumpAmp}`
+        `holdMin: 0.55`,
+        `holdMax: 1.25`,
+        `circlePeriodSec: 11.0`,
+        `fig8PeriodSec: 13.0`,
+        `jumpAmplitude: ${jumpAmp}`,
+        `arcBulge: 0.35`,
+        `trailPoints: 90`,
+        `trailEveryNFrames: 1`
       ].join('; ');
 
       star.setAttribute('pursuit3axis', attrs);
@@ -633,7 +808,6 @@
       btnRetest.disabled = false;
       btnSetNeutral.disabled = false;
       btnStartCal.disabled = false;
-
       calStatus.textContent = 'Training ended. Set Neutral again, then run Post-training Re-test.';
     }
 
@@ -671,25 +845,42 @@
     }
     requestAnimationFrame(rafLoop);
 
-    // Init
     btnStartCal.disabled = true;
     loadSaved();
     updateResultsUI();
   </script>
 
-  <!-- IMPORTANT: remove manual height offset (Quest already provides head height) -->
+  <!-- IMPORTANT: Stationary-friendly floor reference space -->
+  <a-scene webxr="referenceSpaceType: local-floor"
+           renderer="colorManagement: true"
+           background="color: #030515"
+           vr-mode-ui="enabled: true">
 
-<a-scene webxr="referenceSpaceType: local-floor" renderer="colorManagement: true" background="color: #0b1020" vr-mode-ui="enabled: true">
+    <!-- Immersive background -->
+    <a-entity starfield="count: 1200; radius: 75; size: 0.06"></a-entity>
+    <a-entity light="type: ambient; intensity: 0.8"></a-entity>
+    <a-entity light="type: directional; intensity: 0.5" position="1 2 1"></a-entity>
+
+    <!-- Optional faint “horizon” floor reference -->
+    <a-plane rotation="-90 0 0" width="12" height="12" position="0 0 0"
+             material="color: #0b1536; opacity: 0.10"></a-plane>
+
+    <!-- Camera rig (no manual height offset) -->
     <a-entity id="rig">
       <a-camera position="0 0 0">
+        <!-- Centre ring -->
         <a-entity position="0 0 -1"
                   geometry="primitive: ring; radiusInner: 0.012; radiusOuter: 0.016"
                   material="color: #FFFFFF; shader: flat; opacity: 0.9"></a-entity>
       </a-camera>
     </a-entity>
 
+    <!-- Trail holder -->
+    <a-entity id="trail"></a-entity>
+
+    <!-- Star target -->
     <a-entity id="star"
-      pursuit3axis="mode: cycle; yawRangeDeg: 25; pitchRangeDeg: 15; rollRangeDeg: 10; distMin: 1.2; distMax: 2.2; speed: 0.22; jumpAmplitude: 0.7;">
+      pursuit3axis="mode: cycle; yawRangeDeg: 25; pitchRangeDeg: 15; rollRangeDeg: 10; distMin: 1.2; distMax: 2.2; speed: 0.20; jumpAmplitude: 0.7; arcBulge: 0.35; trailPoints: 90;">
       <a-sphere radius="0.03"
                 material="color: #ffe27a; emissive: #ffe27a; emissiveIntensity: 1.0; shader: standard"></a-sphere>
       <a-entity geometry="primitive: icosahedron; radius: 0.055"
@@ -697,10 +888,6 @@
                 animation="property: rotation; to: 0 360 0; loop: true; dur: 1800; easing: linear"></a-entity>
     </a-entity>
 
-    <a-entity light="type: ambient; intensity: 0.9"></a-entity>
-    <a-entity light="type: directional; intensity: 0.5" position="1 2 1"></a-entity>
-    <a-plane rotation="-90 0 0" width="6" height="6" position="0 0 -2"
-             material="color: #111a33; opacity: 0.25"></a-plane>
   </a-scene>
 </body>
 </html>
