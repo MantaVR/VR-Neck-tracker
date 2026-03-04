@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Head Pursuit Trainer + Calibration (WebXR)</title>
+  <title>Head Pursuit Trainer + Calibration (Quest) — Fixed Origin</title>
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
   <style>
     body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background:#050816; }
@@ -47,8 +47,8 @@
   <div class="panel" id="ui">
     <div class="title">Head Pursuit Trainer — Calibration + Re-test</div>
     <div class="mini">
-      This measures your comfortable ROM in <b>yaw</b> (L/R), <b>pitch</b> (Up/Down), <b>roll</b> (tilt).
-      Use a calm range; don’t force end range. You can use <b>Training %</b> to keep the star inside ~70–90% of your ROM.
+      Quest fix included: target motion is now defined relative to your <b>neutral head direction</b>, so it stays in front of you.
+      Set Neutral while looking straight ahead (comfortable posture).
     </div>
 
     <div class="grid">
@@ -74,7 +74,7 @@
       </div>
 
       <div class="row" style="grid-column: 1 / -1;">
-        <label for="trainPct"><b>Training % of measured ROM</b> (safer)</label>
+        <label for="trainPct"><b>Training % of measured ROM</b></label>
         <input id="trainPct" type="range" min="50" max="100" step="1" value="80" />
         <output id="trainPctOut">80%</output>
       </div>
@@ -143,20 +143,17 @@
     const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
 
     // Extract yaw/pitch/roll (in degrees) from camera orientation, relative to neutral quaternion.
-    // We do: qRel = qNeutral^{-1} * qCurrent
     function getRelativeYPRDeg(cameraObj3D, qNeutral) {
       const qCur = cameraObj3D.quaternion.clone();
       const qRel = qNeutral.clone().invert().multiply(qCur); // neutral^-1 * current
-
-      const e = new THREE.Euler().setFromQuaternion(qRel, 'YXZ'); // Yaw around Y, Pitch around X, Roll around Z
-      const yaw = rad2deg(e.y);
-      const pitch = rad2deg(e.x);
-      const roll = rad2deg(e.z);
-      return { yaw, pitch, roll };
+      const e = new THREE.Euler().setFromQuaternion(qRel, 'YXZ');
+      return { yaw: rad2deg(e.y), pitch: rad2deg(e.x), roll: rad2deg(e.z) };
     }
 
     /***********************
-     * Pursuit component (same engine as before)
+     * Pursuit component
+     * Key fix: apply window.qNeutral to the target motion vector
+     * so the whole motion cone is anchored to your neutral gaze direction.
      ************************/
     AFRAME.registerComponent('pursuit3axis', {
       schema: {
@@ -213,16 +210,23 @@
         const pitch = THREE.MathUtils.degToRad((Math.random()*2 - 1) * d.pitchRangeDeg * amp);
         const dist  = this._rand(d.distMin, d.distMax);
 
+        // Camera forward in A-Frame is -Z
         const x = Math.tan(yaw)   * dist;
         const y = Math.tan(pitch) * dist;
         const z = -dist;
-
         return { x, y, z };
       },
 
-      _applyRollToVec: function (v, rollRad) {
+      _applyRollAndNeutral: function (v, rollRad) {
+        // 1) roll rotates the target motion plane around Z (tilt challenge)
         const m = new THREE.Matrix4().makeRotationZ(rollRad);
-        return v.applyMatrix4(m);
+        v.applyMatrix4(m);
+
+        // 2) neutral quaternion rotates the whole motion cone so it is "in front of neutral gaze"
+        if (window.qNeutral) {
+          v.applyQuaternion(window.qNeutral);
+        }
+        return v;
       },
 
       _newRollAndDist: function () {
@@ -271,10 +275,12 @@
         const d = this.data;
         const amp = (this._mode === 'jumps') ? d.jumpAmplitude : 1.0;
         const p = this._pickEnvelopePoint(amp);
-        const v = new THREE.Vector3(p.x, p.y, p.z);
 
+        // Roll varies per segment but remains stable while you pursue
         this._rollRad = THREE.MathUtils.degToRad((Math.random()*2 - 1) * d.rollRangeDeg);
-        this.dest.copy(this._applyRollToVec(v, this._rollRad));
+
+        const v = new THREE.Vector3(p.x, p.y, p.z);
+        this.dest.copy(this._applyRollAndNeutral(v, this._rollRad));
         this._hold = this._rand(d.holdMin, d.holdMax);
 
         if (snap) {
@@ -286,12 +292,16 @@
       _snapToInitial: function () {
         this._t = 0;
         this._hold = 0;
-        if (this._mode === 'circle' || this._mode === 'figure8') {
-          this._newRollAndDist();
-          this.cur.set(0, 0, -this._dist);
-          this.el.object3D.position.copy(this.cur);
-        } else {
-          this._pickNewDest(true);
+
+        // Start with a stable "straight-ahead" point at the current distance
+        this._newRollAndDist();
+        const v0 = new THREE.Vector3(0, 0, -this._dist);
+        this.cur.copy(this._applyRollAndNeutral(v0, 0));
+        this.el.object3D.position.copy(this.cur);
+
+        // For drift/jumps also pick a next dest
+        if (this._mode === 'drift' || this._mode === 'jumps') {
+          this._pickNewDest(false);
         }
       },
 
@@ -309,14 +319,13 @@
 
           const yawMax   = THREE.MathUtils.degToRad(d.yawRangeDeg);
           const pitchMax = THREE.MathUtils.degToRad(d.pitchRangeDeg);
-
           const rx = Math.tan(yawMax)   * this._dist;
           const ry = Math.tan(pitchMax) * this._dist;
 
           const a = w * this._t;
           const v = new THREE.Vector3(rx * Math.cos(a), ry * Math.sin(a), -this._dist);
 
-          this.dest.copy(this._applyRollToVec(v, this._rollRad));
+          this.dest.copy(this._applyRollAndNeutral(v, this._rollRad));
           this.cur.lerp(this.dest, d.smooth);
           this.el.object3D.position.copy(this.cur);
           return;
@@ -328,14 +337,13 @@
 
           const yawMax   = THREE.MathUtils.degToRad(d.yawRangeDeg);
           const pitchMax = THREE.MathUtils.degToRad(d.pitchRangeDeg);
-
           const rx = Math.tan(yawMax)   * this._dist;
           const ry = Math.tan(pitchMax) * this._dist;
 
           const a = w * this._t;
           const v = new THREE.Vector3(rx * Math.sin(a), ry * 0.5 * Math.sin(2 * a), -this._dist);
 
-          this.dest.copy(this._applyRollToVec(v, this._rollRad));
+          this.dest.copy(this._applyRollAndNeutral(v, this._rollRad));
           this.cur.lerp(this.dest, d.smooth);
           this.el.object3D.position.copy(this.cur);
           return;
@@ -383,30 +391,22 @@
     const btnRetest = $('btnRetest');
     const btnClear = $('btnClear');
 
-    const STORAGE_KEY = 'pursuit3axis_rom_v1';
+    const STORAGE_KEY = 'pursuit3axis_rom_v2';
 
-    let qNeutral = new THREE.Quaternion(); // set when neutral captured
+    // Neutral quaternion (camera orientation at neutral)
+    let qNeutral = new THREE.Quaternion();
     let neutralCaptured = false;
 
-    // Baseline and retest ROM objects:
-    // { yawL, yawR, pitchU, pitchD, rollL, rollR, yawROM, pitchROM, rollROM, timestamp }
+    // Expose to pursuit component (used to rotate the motion cone)
+    window.qNeutral = null;
+
     let baseline = null;
     let retest = null;
 
-    // Calibration state machine
-    const CAL = {
-      idle: 'idle',
-      yaw: 'yaw',
-      pitch: 'pitch',
-      roll: 'roll',
-      done: 'done'
-    };
+    const CAL = { idle:'idle', yaw:'yaw', pitch:'pitch', roll:'roll', done:'done' };
     let calPhase = CAL.idle;
-
-    // Extremes while sampling
     let extremes = null;
 
-    // Training timer
     let trainingActive = false;
     let trainingEndsAt = 0;
 
@@ -422,7 +422,6 @@
         retest = parsed.retest || null;
         updateResultsUI();
         if (baseline) {
-          // enable training once neutral is set; still require neutral for measurement
           romYawEl.textContent = fmtDeg(baseline.yawROM);
           romPitchEl.textContent = fmtDeg(baseline.pitchROM);
           romRollEl.textContent = fmtDeg(baseline.rollROM);
@@ -463,7 +462,6 @@
         const dYaw = retest.yawROM - baseline.yawROM;
         const dPitch = retest.pitchROM - baseline.pitchROM;
         const dRoll = retest.rollROM - baseline.rollROM;
-
         const sign = v => (v>=0 ? '+' : '');
         resultsEl.innerHTML =
           `<div>Baseline (${new Date(baseline.timestamp).toLocaleString()}): ` +
@@ -472,7 +470,7 @@
           `Yaw ${fmtDeg(retest.yawROM)} | Pitch ${fmtDeg(retest.pitchROM)} | Roll ${fmtDeg(retest.rollROM)}</div>` +
           `<div><b>Change:</b> ` +
           `Yaw ${sign(dYaw)}${fmtDeg(dYaw)} | Pitch ${sign(dPitch)}${fmtDeg(dPitch)} | Roll ${sign(dRoll)}${fmtDeg(dRoll)}</div>` +
-          `<div class="mini" style="margin-top:6px;opacity:0.85;">Note: short-term changes can reflect warm-up/guarding differences as much as “true” ROM change.</div>`;
+          `<div class="mini" style="margin-top:6px;opacity:0.85;">Short-term changes can reflect warm-up/guarding differences.</div>`;
       }
     }
 
@@ -484,11 +482,15 @@
     function setNeutral() {
       const camObj = getCameraObj();
       if (!camObj) { calStatus.textContent = 'Camera not ready yet.'; return; }
+
       qNeutral.copy(camObj.quaternion);
       neutralCaptured = true;
       neutralSetEl.textContent = 'Yes';
+
+      // expose globally for target motion anchoring
+      window.qNeutral = qNeutral.clone();
+
       calStatus.textContent = 'Neutral set. Now calibrate ROM.';
-      // training still needs baseline ROM:
       btnStartCal.disabled = false;
     }
 
@@ -500,16 +502,14 @@
       };
     }
 
-    // Guided calibration: each phase samples for N seconds.
     async function runCalibration(isRetest=false) {
       if (!neutralCaptured) { calStatus.textContent = 'Set Neutral first.'; return; }
       resetExtremes();
 
-      // Simple guided phases. You move smoothly to comfortable end range and back while we sample.
       const phases = [
         { key: CAL.yaw,   seconds: 10, prompt: 'Yaw: slowly turn LEFT then RIGHT (comfortable end range), a few times.' },
         { key: CAL.pitch, seconds: 10, prompt: 'Pitch: slowly look UP then DOWN (comfortable end range), a few times.' },
-        { key: CAL.roll,  seconds: 10, prompt: 'Roll: slowly tilt LEFT ear to shoulder then RIGHT, a few times.' }
+        { key: CAL.roll,  seconds: 10, prompt: 'Roll: slowly tilt LEFT then RIGHT, a few times.' }
       ];
 
       calStatus.textContent = 'Calibration starting...';
@@ -518,46 +518,34 @@
       for (const p of phases) {
         calPhase = p.key;
         calStatus.textContent = p.prompt;
-
-        // sample for p.seconds
         const start = performance.now();
         while ((performance.now() - start) < p.seconds * 1000) {
           await new Promise(r => requestAnimationFrame(r));
-          // sampling happens in the main RAF loop below; here we just wait
         }
       }
 
       calPhase = CAL.done;
       calStatus.textContent = 'Calibration complete.';
 
-      // Compute ROM from extremes (relative angles). We treat yawMin as left, yawMax as right, etc.
-      // Signs depend on headset coordinates, but ROM uses absolute span so it's robust.
       const yawROM = Math.abs(extremes.yawMax - extremes.yawMin);
       const pitchROM = Math.abs(extremes.pitchMax - extremes.pitchMin);
       const rollROM = Math.abs(extremes.rollMax - extremes.rollMin);
 
       const romObj = {
-        yawL: Math.abs(extremes.yawMin),
-        yawR: Math.abs(extremes.yawMax),
-        pitchU: Math.abs(extremes.pitchMax),
-        pitchD: Math.abs(extremes.pitchMin),
-        rollL: Math.abs(extremes.rollMin),
-        rollR: Math.abs(extremes.rollMax),
         yawROM, pitchROM, rollROM,
         timestamp: Date.now()
       };
 
-      // Update UI
       romYawEl.textContent = fmtDeg(romObj.yawROM);
       romPitchEl.textContent = fmtDeg(romObj.pitchROM);
       romRollEl.textContent = fmtDeg(romObj.rollROM);
 
       if (!isRetest) {
         baseline = romObj;
-        retest = null; // reset retest when new baseline done
+        retest = null;
         calStatus.textContent = 'Baseline ROM saved. You can start training.';
         btnEnterVr.disabled = false;
-        btnRetest.disabled = true; // enable after training ends
+        btnRetest.disabled = true;
       } else {
         retest = romObj;
         calStatus.textContent = 'Re-test saved.';
@@ -571,8 +559,6 @@
       if (!baseline) return;
 
       const pct = parseFloat(trainPct.value) / 100;
-      // Use pct of measured total ROM; convert total span to +/- range for target envelope.
-      // e.g. if yawROM is 60°, we set yawRangeDeg ~ 30° * pct
       const yawRangeDeg = (baseline.yawROM / 2) * pct;
       const pitchRangeDeg = (baseline.pitchROM / 2) * pct;
       const rollRangeDeg = (baseline.rollROM / 2) * pct;
@@ -581,7 +567,6 @@
       const speed = parseFloat($('speed').value);
       const jumpAmp = parseFloat($('jumpAmp').value);
 
-      // Clamp to something sensible to avoid bizarre values if measurement was tiny
       const y = clamp(yawRangeDeg, 0, 80);
       const p = clamp(pitchRangeDeg, 0, 60);
       const r = clamp(rollRangeDeg, 0, 40);
@@ -611,6 +596,8 @@
 
     function startTraining() {
       if (!baseline) { calStatus.textContent = 'Please calibrate baseline ROM first.'; return; }
+      if (!window.qNeutral) { calStatus.textContent = 'Please Set Neutral first.'; return; }
+
       applyTrainingSettingsFromBaseline();
 
       const scene = document.querySelector('a-scene');
@@ -636,23 +623,20 @@
       btnSetNeutral.disabled = false;
       btnStartCal.disabled = false;
 
-      calStatus.textContent = 'Training ended. Set Neutral again (recommended), then run Post-training Re-test.';
+      calStatus.textContent = 'Training ended. Set Neutral again, then run Post-training Re-test.';
     }
 
-    // Button wiring
     btnSetNeutral.addEventListener('click', setNeutral);
     btnStartCal.addEventListener('click', () => runCalibration(false));
     btnEnterVr.addEventListener('click', startTraining);
     btnEndTraining.addEventListener('click', endTraining);
     btnRetest.addEventListener('click', async () => {
-      // strongly recommend re-setting neutral for re-test consistency
       if (!neutralCaptured) { calStatus.textContent = 'Set Neutral first.'; return; }
       await runCalibration(true);
       btnRetest.disabled = true;
     });
     btnClear.addEventListener('click', clearSaved);
 
-    // Live update loop: update live angles + collect extremes during calibration
     function rafLoop() {
       const camObj = getCameraObj();
       if (camObj && neutralCaptured) {
@@ -661,7 +645,6 @@
         livePitch.textContent = fmt1(pitch);
         liveRoll.textContent = fmt1(roll);
 
-        // If calibrating, capture extremes continuously (across all phases)
         if (calPhase === CAL.yaw || calPhase === CAL.pitch || calPhase === CAL.roll) {
           extremes.yawMin = Math.min(extremes.yawMin, yaw);
           extremes.yawMax = Math.max(extremes.yawMax, yaw);
@@ -672,30 +655,27 @@
         }
       }
 
-      // Auto-end training when timer expires
-      if (trainingActive && performance.now() >= trainingEndsAt) {
-        endTraining();
-      }
-
+      if (trainingActive && performance.now() >= trainingEndsAt) endTraining();
       requestAnimationFrame(rafLoop);
     }
     requestAnimationFrame(rafLoop);
 
-    // Init UI state
-    btnStartCal.disabled = true; // enable after neutral is set
+    // Init
+    btnStartCal.disabled = true;
     loadSaved();
+    updateResultsUI();
   </script>
 
+  <!-- IMPORTANT: remove manual height offset (Quest already provides head height) -->
   <a-scene renderer="colorManagement: true" background="color: #0b1020" vr-mode-ui="enabled: true">
-    <a-entity id="rig" position="0 1.6 0">
-      <a-camera>
+    <a-entity id="rig">
+      <a-camera position="0 0 0">
         <a-entity position="0 0 -1"
                   geometry="primitive: ring; radiusInner: 0.012; radiusOuter: 0.016"
                   material="color: #FFFFFF; shader: flat; opacity: 0.9"></a-entity>
       </a-camera>
     </a-entity>
 
-    <!-- Star target (defaults; overwritten from baseline at startTraining) -->
     <a-entity id="star"
       pursuit3axis="mode: cycle; yawRangeDeg: 25; pitchRangeDeg: 15; rollRangeDeg: 10; distMin: 1.2; distMax: 2.2; speed: 0.22; jumpAmplitude: 0.7;">
       <a-sphere radius="0.03"
