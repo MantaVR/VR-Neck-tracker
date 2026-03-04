@@ -1,0 +1,714 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Head Pursuit Trainer + Calibration (WebXR)</title>
+  <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+  <style>
+    body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background:#050816; }
+    .panel {
+      position: fixed; left: 12px; top: 12px; z-index: 30;
+      width: min(520px, calc(100vw - 24px));
+      background: rgba(0,0,0,0.72); color: #fff;
+      padding: 12px 12px 10px; border-radius: 12px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+      backdrop-filter: blur(6px);
+    }
+    .title { font-weight: 800; margin-bottom: 6px; }
+    .mini { font-size: 12px; opacity: 0.9; line-height: 1.25; }
+    .grid { display:grid; grid-template-columns: 1fr 1fr; gap: 8px 10px; margin-top: 10px; }
+    .row { display:flex; gap:10px; align-items:center; margin: 8px 0; }
+    .row label { flex: 1 1 auto; font-size: 13px; opacity: 0.95; }
+    .row input[type="range"] { flex: 1 1 220px; }
+    .row output { width: 74px; text-align:right; font-variant-numeric: tabular-nums; opacity:0.95; }
+    button, select {
+      width: 100%; border-radius: 10px; border: 1px solid rgba(255,255,255,0.18);
+      background: rgba(255,255,255,0.10); color: #fff; padding: 10px 10px;
+      font-size: 14px;
+    }
+    button.primary { background: rgba(120, 180, 255, 0.32); border-color: rgba(120,180,255,0.60); cursor:pointer; }
+    button.warn { background: rgba(255, 180, 120, 0.22); border-color: rgba(255,180,120,0.45); cursor:pointer; }
+    button:disabled { opacity: 0.45; cursor:not-allowed; }
+    .box {
+      border: 1px solid rgba(255,255,255,0.16);
+      border-radius: 10px;
+      padding: 10px;
+      background: rgba(255,255,255,0.05);
+    }
+    .kv { display:grid; grid-template-columns: 1fr auto; gap: 6px 10px; font-size: 13px; }
+    .kv div:nth-child(2n) { text-align:right; font-variant-numeric: tabular-nums; }
+    .hr { height: 1px; background: rgba(255,255,255,0.12); margin: 10px 0; }
+    code { color:#c7f; }
+  </style>
+</head>
+
+<body>
+  <div class="panel" id="ui">
+    <div class="title">Head Pursuit Trainer — Calibration + Re-test</div>
+    <div class="mini">
+      This measures your comfortable ROM in <b>yaw</b> (L/R), <b>pitch</b> (Up/Down), <b>roll</b> (tilt).
+      Use a calm range; don’t force end range. You can use <b>Training %</b> to keep the star inside ~70–90% of your ROM.
+    </div>
+
+    <div class="grid">
+      <div class="box">
+        <div class="mini" style="margin-bottom:6px;"><b>Live angles (relative to neutral)</b></div>
+        <div class="kv" id="liveKV">
+          <div>Yaw (°)</div><div id="liveYaw">0.0</div>
+          <div>Pitch (°)</div><div id="livePitch">0.0</div>
+          <div>Roll (°)</div><div id="liveRoll">0.0</div>
+        </div>
+      </div>
+
+      <div class="box">
+        <div class="mini" style="margin-bottom:6px;"><b>Calibration status</b></div>
+        <div class="mini" id="calStatus">Not started.</div>
+        <div class="hr"></div>
+        <div class="kv">
+          <div>Neutral set</div><div id="neutralSet">No</div>
+          <div>Yaw ROM</div><div id="romYaw">—</div>
+          <div>Pitch ROM</div><div id="romPitch">—</div>
+          <div>Roll ROM</div><div id="romRoll">—</div>
+        </div>
+      </div>
+
+      <div class="row" style="grid-column: 1 / -1;">
+        <label for="trainPct"><b>Training % of measured ROM</b> (safer)</label>
+        <input id="trainPct" type="range" min="50" max="100" step="1" value="80" />
+        <output id="trainPctOut">80%</output>
+      </div>
+
+      <div>
+        <div class="mini" style="margin-bottom:6px;">Mode</div>
+        <select id="mode">
+          <option value="cycle" selected>cycle (drift → circle → figure8 → jumps)</option>
+          <option value="drift">drift (smooth random)</option>
+          <option value="circle">circle</option>
+          <option value="figure8">figure-8</option>
+          <option value="jumps">jumps (hold → jump)</option>
+        </select>
+      </div>
+
+      <div>
+        <div class="mini" style="margin-bottom:6px;">Speed</div>
+        <select id="speed">
+          <option value="0.14">Very gentle</option>
+          <option value="0.20">Gentle</option>
+          <option value="0.28" selected>Medium</option>
+          <option value="0.34">Brisk</option>
+        </select>
+      </div>
+
+      <div>
+        <div class="mini" style="margin-bottom:6px;">Training duration</div>
+        <select id="duration">
+          <option value="180">3 min</option>
+          <option value="300" selected>5 min</option>
+          <option value="480">8 min</option>
+          <option value="600">10 min</option>
+        </select>
+      </div>
+
+      <div>
+        <div class="mini" style="margin-bottom:6px;">Jump amplitude</div>
+        <select id="jumpAmp">
+          <option value="0.4">Gentle</option>
+          <option value="0.7" selected>Medium</option>
+          <option value="1.0">Full</option>
+        </select>
+      </div>
+
+      <button id="btnSetNeutral" class="primary">1) Set Neutral (look straight ahead)</button>
+      <button id="btnStartCal" class="primary">2) Calibrate ROM (guided)</button>
+
+      <button id="btnEnterVr" class="primary" disabled>3) Start Training (Enter VR)</button>
+      <button id="btnEndTraining" class="warn" disabled>End Training</button>
+
+      <button id="btnRetest" class="primary" disabled>4) Post-training Re-test (same calibration)</button>
+      <button id="btnClear" class="warn">Clear saved measurements</button>
+
+      <div class="box" style="grid-column: 1 / -1;">
+        <div class="mini" style="margin-bottom:6px;"><b>Results (baseline vs re-test)</b></div>
+        <div class="mini" id="results">No results yet.</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    /***********************
+     * Helper math
+     ************************/
+    const rad2deg = r => r * 180 / Math.PI;
+    const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+
+    // Extract yaw/pitch/roll (in degrees) from camera orientation, relative to neutral quaternion.
+    // We do: qRel = qNeutral^{-1} * qCurrent
+    function getRelativeYPRDeg(cameraObj3D, qNeutral) {
+      const qCur = cameraObj3D.quaternion.clone();
+      const qRel = qNeutral.clone().invert().multiply(qCur); // neutral^-1 * current
+
+      const e = new THREE.Euler().setFromQuaternion(qRel, 'YXZ'); // Yaw around Y, Pitch around X, Roll around Z
+      const yaw = rad2deg(e.y);
+      const pitch = rad2deg(e.x);
+      const roll = rad2deg(e.z);
+      return { yaw, pitch, roll };
+    }
+
+    /***********************
+     * Pursuit component (same engine as before)
+     ************************/
+    AFRAME.registerComponent('pursuit3axis', {
+      schema: {
+        mode: { type: 'string', default: 'cycle' },
+        cycleOrder: { type: 'string', default: 'drift,circle,figure8,jumps' },
+        cycleMinSec: { type: 'number', default: 35 },
+        cycleMaxSec: { type: 'number', default: 55 },
+
+        yawRangeDeg:   { type: 'number', default: 25 },
+        pitchRangeDeg: { type: 'number', default: 15 },
+        rollRangeDeg:  { type: 'number', default: 10 },
+        distMin:       { type: 'number', default: 1.2 },
+        distMax:       { type: 'number', default: 2.2 },
+
+        speed:   { type: 'number', default: 0.22 },
+        smooth:  { type: 'number', default: 0.14 },
+        holdMin: { type: 'number', default: 0.35 },
+        holdMax: { type: 'number', default: 1.10 },
+
+        circlePeriodSec: { type: 'number', default: 10.0 },
+        fig8PeriodSec:   { type: 'number', default: 12.0 },
+
+        jumpAmplitude: { type: 'number', default: 0.7 }
+      },
+
+      init: function () {
+        this.cur = new THREE.Vector3();
+        this.dest = new THREE.Vector3();
+        this.tmp = new THREE.Vector3();
+        this._t = 0;
+        this._hold = 0;
+        this._mode = 'drift';
+        this._cycleLeft = 0;
+        this._cycleIdx = 0;
+        this._cycle = this.data.cycleOrder.split(',').map(s => s.trim()).filter(Boolean);
+        this._rollRad = 0;
+        this._dist = 1.6;
+
+        this._resolveMode(true);
+        this._snapToInitial();
+      },
+
+      update: function () {
+        this._cycle = this.data.cycleOrder.split(',').map(s => s.trim()).filter(Boolean);
+        if (!this._cycle.length) this._cycle = ['drift','circle','figure8','jumps'];
+        this._resolveMode(false);
+      },
+
+      _rand: function (a, b) { return a + Math.random() * (b - a); },
+
+      _pickEnvelopePoint: function (amp = 1.0) {
+        const d = this.data;
+        const yaw   = THREE.MathUtils.degToRad((Math.random()*2 - 1) * d.yawRangeDeg   * amp);
+        const pitch = THREE.MathUtils.degToRad((Math.random()*2 - 1) * d.pitchRangeDeg * amp);
+        const dist  = this._rand(d.distMin, d.distMax);
+
+        const x = Math.tan(yaw)   * dist;
+        const y = Math.tan(pitch) * dist;
+        const z = -dist;
+
+        return { x, y, z };
+      },
+
+      _applyRollToVec: function (v, rollRad) {
+        const m = new THREE.Matrix4().makeRotationZ(rollRad);
+        return v.applyMatrix4(m);
+      },
+
+      _newRollAndDist: function () {
+        const d = this.data;
+        this._rollRad = THREE.MathUtils.degToRad((Math.random()*2 - 1) * d.rollRangeDeg);
+        this._dist = this._rand(d.distMin, d.distMax);
+      },
+
+      _resolveMode: function (forceReset) {
+        const d = this.data;
+        const requested = (d.mode || 'cycle').toLowerCase();
+
+        if (requested === 'cycle') {
+          if (forceReset || !this._cycleLeft || !this._cycle.length) {
+            this._cycleIdx = this._cycleIdx % this._cycle.length;
+            this._mode = this._cycle[this._cycleIdx] || 'drift';
+            this._cycleLeft = this._rand(d.cycleMinSec, d.cycleMaxSec);
+            this._newRollAndDist();
+          }
+        } else {
+          this._mode = requested;
+          if (forceReset) {
+            this._newRollAndDist();
+            this._cycleLeft = 0;
+          }
+        }
+      },
+
+      _advanceCycleIfNeeded: function (dt) {
+        const d = this.data;
+        if ((d.mode || 'cycle').toLowerCase() !== 'cycle') return;
+
+        this._cycleLeft -= dt;
+        if (this._cycleLeft <= 0) {
+          this._cycleIdx = (this._cycleIdx + 1) % this._cycle.length;
+          this._mode = this._cycle[this._cycleIdx] || 'drift';
+          this._cycleLeft = this._rand(d.cycleMinSec, d.cycleMaxSec);
+          this._t = 0;
+          this._hold = 0;
+          this._newRollAndDist();
+          if (this._mode === 'drift' || this._mode === 'jumps') this._pickNewDest(true);
+        }
+      },
+
+      _pickNewDest: function (snap) {
+        const d = this.data;
+        const amp = (this._mode === 'jumps') ? d.jumpAmplitude : 1.0;
+        const p = this._pickEnvelopePoint(amp);
+        const v = new THREE.Vector3(p.x, p.y, p.z);
+
+        this._rollRad = THREE.MathUtils.degToRad((Math.random()*2 - 1) * d.rollRangeDeg);
+        this.dest.copy(this._applyRollToVec(v, this._rollRad));
+        this._hold = this._rand(d.holdMin, d.holdMax);
+
+        if (snap) {
+          this.cur.copy(this.dest);
+          this.el.object3D.position.copy(this.cur);
+        }
+      },
+
+      _snapToInitial: function () {
+        this._t = 0;
+        this._hold = 0;
+        if (this._mode === 'circle' || this._mode === 'figure8') {
+          this._newRollAndDist();
+          this.cur.set(0, 0, -this._dist);
+          this.el.object3D.position.copy(this.cur);
+        } else {
+          this._pickNewDest(true);
+        }
+      },
+
+      tick: function (time, timeDelta) {
+        const d = this.data;
+        const dt = Math.min(timeDelta / 1000, 0.05);
+
+        this._resolveMode(false);
+        this._advanceCycleIfNeeded(dt);
+        this._t += dt;
+
+        if (this._mode === 'circle') {
+          const period = Math.max(4.0, d.circlePeriodSec);
+          const w = (2 * Math.PI) / period;
+
+          const yawMax   = THREE.MathUtils.degToRad(d.yawRangeDeg);
+          const pitchMax = THREE.MathUtils.degToRad(d.pitchRangeDeg);
+
+          const rx = Math.tan(yawMax)   * this._dist;
+          const ry = Math.tan(pitchMax) * this._dist;
+
+          const a = w * this._t;
+          const v = new THREE.Vector3(rx * Math.cos(a), ry * Math.sin(a), -this._dist);
+
+          this.dest.copy(this._applyRollToVec(v, this._rollRad));
+          this.cur.lerp(this.dest, d.smooth);
+          this.el.object3D.position.copy(this.cur);
+          return;
+        }
+
+        if (this._mode === 'figure8') {
+          const period = Math.max(5.0, d.fig8PeriodSec);
+          const w = (2 * Math.PI) / period;
+
+          const yawMax   = THREE.MathUtils.degToRad(d.yawRangeDeg);
+          const pitchMax = THREE.MathUtils.degToRad(d.pitchRangeDeg);
+
+          const rx = Math.tan(yawMax)   * this._dist;
+          const ry = Math.tan(pitchMax) * this._dist;
+
+          const a = w * this._t;
+          const v = new THREE.Vector3(rx * Math.sin(a), ry * 0.5 * Math.sin(2 * a), -this._dist);
+
+          this.dest.copy(this._applyRollToVec(v, this._rollRad));
+          this.cur.lerp(this.dest, d.smooth);
+          this.el.object3D.position.copy(this.cur);
+          return;
+        }
+
+        // drift + jumps
+        const distToDest = this.cur.distanceTo(this.dest);
+        if (distToDest < 0.03) {
+          this._hold -= dt;
+          if (this._hold <= 0) this._pickNewDest(false);
+          return;
+        }
+
+        const step = Math.max(0.01, d.speed) * dt;
+        this.tmp.copy(this.dest).sub(this.cur);
+        const len = this.tmp.length();
+        if (len > 0) this.tmp.multiplyScalar(Math.min(step / len, 1));
+        this.cur.add(this.tmp);
+
+        if (d.smooth > 0) this.cur.lerp(this.dest, d.smooth * 0.25);
+        this.el.object3D.position.copy(this.cur);
+      }
+    });
+
+    /***********************
+     * UI + Calibration logic
+     ************************/
+    const $ = id => document.getElementById(id);
+
+    const trainPct = $('trainPct');
+    const trainPctOut = $('trainPctOut');
+    trainPct.addEventListener('input', () => trainPctOut.textContent = `${trainPct.value}%`);
+    trainPctOut.textContent = `${trainPct.value}%`;
+
+    const liveYaw = $('liveYaw'), livePitch = $('livePitch'), liveRoll = $('liveRoll');
+    const calStatus = $('calStatus');
+    const neutralSetEl = $('neutralSet');
+    const romYawEl = $('romYaw'), romPitchEl = $('romPitch'), romRollEl = $('romRoll');
+    const resultsEl = $('results');
+
+    const btnSetNeutral = $('btnSetNeutral');
+    const btnStartCal = $('btnStartCal');
+    const btnEnterVr = $('btnEnterVr');
+    const btnEndTraining = $('btnEndTraining');
+    const btnRetest = $('btnRetest');
+    const btnClear = $('btnClear');
+
+    const STORAGE_KEY = 'pursuit3axis_rom_v1';
+
+    let qNeutral = new THREE.Quaternion(); // set when neutral captured
+    let neutralCaptured = false;
+
+    // Baseline and retest ROM objects:
+    // { yawL, yawR, pitchU, pitchD, rollL, rollR, yawROM, pitchROM, rollROM, timestamp }
+    let baseline = null;
+    let retest = null;
+
+    // Calibration state machine
+    const CAL = {
+      idle: 'idle',
+      yaw: 'yaw',
+      pitch: 'pitch',
+      roll: 'roll',
+      done: 'done'
+    };
+    let calPhase = CAL.idle;
+
+    // Extremes while sampling
+    let extremes = null;
+
+    // Training timer
+    let trainingActive = false;
+    let trainingEndsAt = 0;
+
+    function fmt1(x){ return (Math.round(x*10)/10).toFixed(1); }
+    function fmtDeg(x){ return `${fmt1(x)}°`; }
+
+    function loadSaved() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return;
+        const parsed = JSON.parse(raw);
+        baseline = parsed.baseline || null;
+        retest = parsed.retest || null;
+        updateResultsUI();
+        if (baseline) {
+          // enable training once neutral is set; still require neutral for measurement
+          romYawEl.textContent = fmtDeg(baseline.yawROM);
+          romPitchEl.textContent = fmtDeg(baseline.pitchROM);
+          romRollEl.textContent = fmtDeg(baseline.rollROM);
+          calStatus.textContent = 'Baseline ROM loaded (saved). Set Neutral to proceed.';
+        }
+      } catch {}
+    }
+
+    function save() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ baseline, retest }));
+    }
+
+    function clearSaved() {
+      baseline = null; retest = null;
+      localStorage.removeItem(STORAGE_KEY);
+      romYawEl.textContent = '—';
+      romPitchEl.textContent = '—';
+      romRollEl.textContent = '—';
+      updateResultsUI();
+      calStatus.textContent = 'Cleared saved measurements.';
+      btnEnterVr.disabled = true;
+      btnRetest.disabled = true;
+    }
+
+    function updateResultsUI() {
+      if (!baseline && !retest) {
+        resultsEl.textContent = 'No results yet.';
+        return;
+      }
+      if (baseline && !retest) {
+        resultsEl.innerHTML =
+          `Baseline (${new Date(baseline.timestamp).toLocaleString()}): ` +
+          `Yaw ${fmtDeg(baseline.yawROM)}, Pitch ${fmtDeg(baseline.pitchROM)}, Roll ${fmtDeg(baseline.rollROM)}. ` +
+          `Run training then do Re-test.`;
+        return;
+      }
+      if (baseline && retest) {
+        const dYaw = retest.yawROM - baseline.yawROM;
+        const dPitch = retest.pitchROM - baseline.pitchROM;
+        const dRoll = retest.rollROM - baseline.rollROM;
+
+        const sign = v => (v>=0 ? '+' : '');
+        resultsEl.innerHTML =
+          `<div>Baseline (${new Date(baseline.timestamp).toLocaleString()}): ` +
+          `Yaw ${fmtDeg(baseline.yawROM)} | Pitch ${fmtDeg(baseline.pitchROM)} | Roll ${fmtDeg(baseline.rollROM)}</div>` +
+          `<div>Re-test (${new Date(retest.timestamp).toLocaleString()}): ` +
+          `Yaw ${fmtDeg(retest.yawROM)} | Pitch ${fmtDeg(retest.pitchROM)} | Roll ${fmtDeg(retest.rollROM)}</div>` +
+          `<div><b>Change:</b> ` +
+          `Yaw ${sign(dYaw)}${fmtDeg(dYaw)} | Pitch ${sign(dPitch)}${fmtDeg(dPitch)} | Roll ${sign(dRoll)}${fmtDeg(dRoll)}</div>` +
+          `<div class="mini" style="margin-top:6px;opacity:0.85;">Note: short-term changes can reflect warm-up/guarding differences as much as “true” ROM change.</div>`;
+      }
+    }
+
+    function getCameraObj() {
+      const cam = document.querySelector('a-camera');
+      return cam ? cam.object3D : null;
+    }
+
+    function setNeutral() {
+      const camObj = getCameraObj();
+      if (!camObj) { calStatus.textContent = 'Camera not ready yet.'; return; }
+      qNeutral.copy(camObj.quaternion);
+      neutralCaptured = true;
+      neutralSetEl.textContent = 'Yes';
+      calStatus.textContent = 'Neutral set. Now calibrate ROM.';
+      // training still needs baseline ROM:
+      btnStartCal.disabled = false;
+    }
+
+    function resetExtremes() {
+      extremes = {
+        yawMin:  999, yawMax: -999,
+        pitchMin: 999, pitchMax: -999,
+        rollMin: 999, rollMax: -999
+      };
+    }
+
+    // Guided calibration: each phase samples for N seconds.
+    async function runCalibration(isRetest=false) {
+      if (!neutralCaptured) { calStatus.textContent = 'Set Neutral first.'; return; }
+      resetExtremes();
+
+      // Simple guided phases. You move smoothly to comfortable end range and back while we sample.
+      const phases = [
+        { key: CAL.yaw,   seconds: 10, prompt: 'Yaw: slowly turn LEFT then RIGHT (comfortable end range), a few times.' },
+        { key: CAL.pitch, seconds: 10, prompt: 'Pitch: slowly look UP then DOWN (comfortable end range), a few times.' },
+        { key: CAL.roll,  seconds: 10, prompt: 'Roll: slowly tilt LEFT ear to shoulder then RIGHT, a few times.' }
+      ];
+
+      calStatus.textContent = 'Calibration starting...';
+      calPhase = CAL.yaw;
+
+      for (const p of phases) {
+        calPhase = p.key;
+        calStatus.textContent = p.prompt;
+
+        // sample for p.seconds
+        const start = performance.now();
+        while ((performance.now() - start) < p.seconds * 1000) {
+          await new Promise(r => requestAnimationFrame(r));
+          // sampling happens in the main RAF loop below; here we just wait
+        }
+      }
+
+      calPhase = CAL.done;
+      calStatus.textContent = 'Calibration complete.';
+
+      // Compute ROM from extremes (relative angles). We treat yawMin as left, yawMax as right, etc.
+      // Signs depend on headset coordinates, but ROM uses absolute span so it's robust.
+      const yawROM = Math.abs(extremes.yawMax - extremes.yawMin);
+      const pitchROM = Math.abs(extremes.pitchMax - extremes.pitchMin);
+      const rollROM = Math.abs(extremes.rollMax - extremes.rollMin);
+
+      const romObj = {
+        yawL: Math.abs(extremes.yawMin),
+        yawR: Math.abs(extremes.yawMax),
+        pitchU: Math.abs(extremes.pitchMax),
+        pitchD: Math.abs(extremes.pitchMin),
+        rollL: Math.abs(extremes.rollMin),
+        rollR: Math.abs(extremes.rollMax),
+        yawROM, pitchROM, rollROM,
+        timestamp: Date.now()
+      };
+
+      // Update UI
+      romYawEl.textContent = fmtDeg(romObj.yawROM);
+      romPitchEl.textContent = fmtDeg(romObj.pitchROM);
+      romRollEl.textContent = fmtDeg(romObj.rollROM);
+
+      if (!isRetest) {
+        baseline = romObj;
+        retest = null; // reset retest when new baseline done
+        calStatus.textContent = 'Baseline ROM saved. You can start training.';
+        btnEnterVr.disabled = false;
+        btnRetest.disabled = true; // enable after training ends
+      } else {
+        retest = romObj;
+        calStatus.textContent = 'Re-test saved.';
+      }
+
+      save();
+      updateResultsUI();
+    }
+
+    function applyTrainingSettingsFromBaseline() {
+      if (!baseline) return;
+
+      const pct = parseFloat(trainPct.value) / 100;
+      // Use pct of measured total ROM; convert total span to +/- range for target envelope.
+      // e.g. if yawROM is 60°, we set yawRangeDeg ~ 30° * pct
+      const yawRangeDeg = (baseline.yawROM / 2) * pct;
+      const pitchRangeDeg = (baseline.pitchROM / 2) * pct;
+      const rollRangeDeg = (baseline.rollROM / 2) * pct;
+
+      const mode = $('mode').value;
+      const speed = parseFloat($('speed').value);
+      const jumpAmp = parseFloat($('jumpAmp').value);
+
+      // Clamp to something sensible to avoid bizarre values if measurement was tiny
+      const y = clamp(yawRangeDeg, 0, 80);
+      const p = clamp(pitchRangeDeg, 0, 60);
+      const r = clamp(rollRangeDeg, 0, 40);
+
+      const star = document.querySelector('#star');
+      const attrs = [
+        `mode: ${mode}`,
+        `cycleOrder: drift,circle,figure8,jumps`,
+        `cycleMinSec: 35`,
+        `cycleMaxSec: 55`,
+        `yawRangeDeg: ${y}`,
+        `pitchRangeDeg: ${p}`,
+        `rollRangeDeg: ${r}`,
+        `distMin: 1.2`,
+        `distMax: 2.2`,
+        `speed: ${speed}`,
+        `smooth: 0.14`,
+        `holdMin: 0.35`,
+        `holdMax: 1.10`,
+        `circlePeriodSec: 10.0`,
+        `fig8PeriodSec: 12.0`,
+        `jumpAmplitude: ${jumpAmp}`
+      ].join('; ');
+
+      star.setAttribute('pursuit3axis', attrs);
+    }
+
+    function startTraining() {
+      if (!baseline) { calStatus.textContent = 'Please calibrate baseline ROM first.'; return; }
+      applyTrainingSettingsFromBaseline();
+
+      const scene = document.querySelector('a-scene');
+      if (scene && scene.enterVR) scene.enterVR();
+
+      trainingActive = true;
+      const dur = parseInt($('duration').value, 10);
+      trainingEndsAt = performance.now() + dur * 1000;
+
+      btnEnterVr.disabled = true;
+      btnStartCal.disabled = true;
+      btnSetNeutral.disabled = true;
+      btnEndTraining.disabled = false;
+      btnRetest.disabled = true;
+
+      calStatus.textContent = `Training running (${dur/60} min). Use "End Training" to stop early.`;
+    }
+
+    function endTraining() {
+      trainingActive = false;
+      btnEndTraining.disabled = true;
+      btnRetest.disabled = false;
+      btnSetNeutral.disabled = false;
+      btnStartCal.disabled = false;
+
+      calStatus.textContent = 'Training ended. Set Neutral again (recommended), then run Post-training Re-test.';
+    }
+
+    // Button wiring
+    btnSetNeutral.addEventListener('click', setNeutral);
+    btnStartCal.addEventListener('click', () => runCalibration(false));
+    btnEnterVr.addEventListener('click', startTraining);
+    btnEndTraining.addEventListener('click', endTraining);
+    btnRetest.addEventListener('click', async () => {
+      // strongly recommend re-setting neutral for re-test consistency
+      if (!neutralCaptured) { calStatus.textContent = 'Set Neutral first.'; return; }
+      await runCalibration(true);
+      btnRetest.disabled = true;
+    });
+    btnClear.addEventListener('click', clearSaved);
+
+    // Live update loop: update live angles + collect extremes during calibration
+    function rafLoop() {
+      const camObj = getCameraObj();
+      if (camObj && neutralCaptured) {
+        const { yaw, pitch, roll } = getRelativeYPRDeg(camObj, qNeutral);
+        liveYaw.textContent = fmt1(yaw);
+        livePitch.textContent = fmt1(pitch);
+        liveRoll.textContent = fmt1(roll);
+
+        // If calibrating, capture extremes continuously (across all phases)
+        if (calPhase === CAL.yaw || calPhase === CAL.pitch || calPhase === CAL.roll) {
+          extremes.yawMin = Math.min(extremes.yawMin, yaw);
+          extremes.yawMax = Math.max(extremes.yawMax, yaw);
+          extremes.pitchMin = Math.min(extremes.pitchMin, pitch);
+          extremes.pitchMax = Math.max(extremes.pitchMax, pitch);
+          extremes.rollMin = Math.min(extremes.rollMin, roll);
+          extremes.rollMax = Math.max(extremes.rollMax, roll);
+        }
+      }
+
+      // Auto-end training when timer expires
+      if (trainingActive && performance.now() >= trainingEndsAt) {
+        endTraining();
+      }
+
+      requestAnimationFrame(rafLoop);
+    }
+    requestAnimationFrame(rafLoop);
+
+    // Init UI state
+    btnStartCal.disabled = true; // enable after neutral is set
+    loadSaved();
+  </script>
+
+  <a-scene renderer="colorManagement: true" background="color: #0b1020" vr-mode-ui="enabled: true">
+    <a-entity id="rig" position="0 1.6 0">
+      <a-camera>
+        <a-entity position="0 0 -1"
+                  geometry="primitive: ring; radiusInner: 0.012; radiusOuter: 0.016"
+                  material="color: #FFFFFF; shader: flat; opacity: 0.9"></a-entity>
+      </a-camera>
+    </a-entity>
+
+    <!-- Star target (defaults; overwritten from baseline at startTraining) -->
+    <a-entity id="star"
+      pursuit3axis="mode: cycle; yawRangeDeg: 25; pitchRangeDeg: 15; rollRangeDeg: 10; distMin: 1.2; distMax: 2.2; speed: 0.22; jumpAmplitude: 0.7;">
+      <a-sphere radius="0.03"
+                material="color: #ffe27a; emissive: #ffe27a; emissiveIntensity: 1.0; shader: standard"></a-sphere>
+      <a-entity geometry="primitive: icosahedron; radius: 0.055"
+                material="color: #ffd24a; wireframe: true; opacity: 0.6"
+                animation="property: rotation; to: 0 360 0; loop: true; dur: 1800; easing: linear"></a-entity>
+    </a-entity>
+
+    <a-entity light="type: ambient; intensity: 0.9"></a-entity>
+    <a-entity light="type: directional; intensity: 0.5" position="1 2 1"></a-entity>
+    <a-plane rotation="-90 0 0" width="6" height="6" position="0 0 -2"
+             material="color: #111a33; opacity: 0.25"></a-plane>
+  </a-scene>
+</body>
+</html>
