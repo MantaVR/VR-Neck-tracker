@@ -678,7 +678,8 @@
   </script>
 
   <!-- IMPORTANT: remove manual height offset (Quest already provides head height) -->
-  <a-scene renderer="colorManagement: true" background="color: #0b1020" vr-mode-ui="enabled: true">
+
+<a-scene webxr="referenceSpaceType: local-floor" renderer="colorManagement: true" background="color: #0b1020" vr-mode-ui="enabled: true">
     <a-entity id="rig">
       <a-camera position="0 0 0">
         <a-entity position="0 0 -1"
