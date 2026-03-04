@@ -155,219 +155,230 @@
      * Key fix: apply window.qNeutral to the target motion vector
      * so the whole motion cone is anchored to your neutral gaze direction.
      ************************/
+    
     AFRAME.registerComponent('pursuit3axis', {
-      schema: {
-        mode: { type: 'string', default: 'cycle' },
-        cycleOrder: { type: 'string', default: 'drift,circle,figure8,jumps' },
-        cycleMinSec: { type: 'number', default: 35 },
-        cycleMaxSec: { type: 'number', default: 55 },
+  schema: {
+    mode: { type: 'string', default: 'cycle' },
+    cycleOrder: { type: 'string', default: 'drift,circle,figure8,jumps' },
+    cycleMinSec: { type: 'number', default: 35 },
+    cycleMaxSec: { type: 'number', default: 55 },
 
-        yawRangeDeg:   { type: 'number', default: 25 },
-        pitchRangeDeg: { type: 'number', default: 15 },
-        rollRangeDeg:  { type: 'number', default: 10 },
-        distMin:       { type: 'number', default: 1.2 },
-        distMax:       { type: 'number', default: 2.2 },
+    yawRangeDeg:   { type: 'number', default: 25 },
+    pitchRangeDeg: { type: 'number', default: 15 },
+    rollRangeDeg:  { type: 'number', default: 10 },
+    distMin:       { type: 'number', default: 1.2 },
+    distMax:       { type: 'number', default: 2.2 },
 
-        speed:   { type: 'number', default: 0.22 },
-        smooth:  { type: 'number', default: 0.14 },
-        holdMin: { type: 'number', default: 0.35 },
-        holdMax: { type: 'number', default: 1.10 },
+    speed:   { type: 'number', default: 0.22 },
+    smooth:  { type: 'number', default: 0.14 },
+    holdMin: { type: 'number', default: 0.35 },
+    holdMax: { type: 'number', default: 1.10 },
 
-        circlePeriodSec: { type: 'number', default: 10.0 },
-        fig8PeriodSec:   { type: 'number', default: 12.0 },
+    circlePeriodSec: { type: 'number', default: 10.0 },
+    fig8PeriodSec:   { type: 'number', default: 12.0 },
 
-        jumpAmplitude: { type: 'number', default: 0.7 }
-      },
+    jumpAmplitude: { type: 'number', default: 0.7 }
+  },
 
-      init: function () {
-        this.cur = new THREE.Vector3();
-        this.dest = new THREE.Vector3();
-        this.tmp = new THREE.Vector3();
-        this._t = 0;
-        this._hold = 0;
-        this._mode = 'drift';
-        this._cycleLeft = 0;
-        this._cycleIdx = 0;
-        this._cycle = this.data.cycleOrder.split(',').map(s => s.trim()).filter(Boolean);
-        this._rollRad = 0;
-        this._dist = 1.6;
+  init: function () {
+    this.cur = new THREE.Vector3();
+    this.dest = new THREE.Vector3();
+    this.tmp = new THREE.Vector3();
 
-        this._resolveMode(true);
-        this._snapToInitial();
-      },
+    // NEW: anchor star to head position
+    this.cameraEl = document.querySelector('a-camera');
+    this.origin = new THREE.Vector3();
 
-      update: function () {
-        this._cycle = this.data.cycleOrder.split(',').map(s => s.trim()).filter(Boolean);
-        if (!this._cycle.length) this._cycle = ['drift','circle','figure8','jumps'];
-        this._resolveMode(false);
-      },
+    this._t = 0;
+    this._hold = 0;
+    this._mode = 'drift';
+    this._cycleLeft = 0;
+    this._cycleIdx = 0;
+    this._cycle = this.data.cycleOrder.split(',').map(s => s.trim()).filter(Boolean);
+    this._rollRad = 0;
+    this._dist = 1.6;
 
-      _rand: function (a, b) { return a + Math.random() * (b - a); },
+    this._resolveMode(true);
+    this._snapToInitial();
+  },
 
-      _pickEnvelopePoint: function (amp = 1.0) {
-        const d = this.data;
-        const yaw   = THREE.MathUtils.degToRad((Math.random()*2 - 1) * d.yawRangeDeg   * amp);
-        const pitch = THREE.MathUtils.degToRad((Math.random()*2 - 1) * d.pitchRangeDeg * amp);
-        const dist  = this._rand(d.distMin, d.distMax);
+  update: function () {
+    this._cycle = this.data.cycleOrder.split(',').map(s => s.trim()).filter(Boolean);
+    if (!this._cycle.length) this._cycle = ['drift','circle','figure8','jumps'];
+    this._resolveMode(false);
+  },
 
-        // Camera forward in A-Frame is -Z
-        const x = Math.tan(yaw)   * dist;
-        const y = Math.tan(pitch) * dist;
-        const z = -dist;
-        return { x, y, z };
-      },
+  _rand: function (a, b) { return a + Math.random() * (b - a); },
 
-      _applyRollAndNeutral: function (v, rollRad) {
-        // 1) roll rotates the target motion plane around Z (tilt challenge)
-        const m = new THREE.Matrix4().makeRotationZ(rollRad);
-        v.applyMatrix4(m);
+  _pickEnvelopePoint: function (amp = 1.0) {
+    const d = this.data;
+    const yaw   = THREE.MathUtils.degToRad((Math.random()*2 - 1) * d.yawRangeDeg   * amp);
+    const pitch = THREE.MathUtils.degToRad((Math.random()*2 - 1) * d.pitchRangeDeg * amp);
+    const dist  = this._rand(d.distMin, d.distMax);
 
-        // 2) neutral quaternion rotates the whole motion cone so it is "in front of neutral gaze"
-        if (window.qNeutral) {
-          v.applyQuaternion(window.qNeutral);
-        }
-        return v;
-      },
+    const x = Math.tan(yaw) * dist;
+    const y = Math.tan(pitch) * dist;
+    const z = -dist;
+    return { x, y, z };
+  },
 
-      _newRollAndDist: function () {
-        const d = this.data;
-        this._rollRad = THREE.MathUtils.degToRad((Math.random()*2 - 1) * d.rollRangeDeg);
-        this._dist = this._rand(d.distMin, d.distMax);
-      },
+  _applyRollAndNeutral: function (v, rollRad) {
+    const m = new THREE.Matrix4().makeRotationZ(rollRad);
+    v.applyMatrix4(m);
 
-      _resolveMode: function (forceReset) {
-        const d = this.data;
-        const requested = (d.mode || 'cycle').toLowerCase();
+    if (window.qNeutral) {
+      v.applyQuaternion(window.qNeutral);
+    }
+    return v;
+  },
 
-        if (requested === 'cycle') {
-          if (forceReset || !this._cycleLeft || !this._cycle.length) {
-            this._cycleIdx = this._cycleIdx % this._cycle.length;
-            this._mode = this._cycle[this._cycleIdx] || 'drift';
-            this._cycleLeft = this._rand(d.cycleMinSec, d.cycleMaxSec);
-            this._newRollAndDist();
-          }
-        } else {
-          this._mode = requested;
-          if (forceReset) {
-            this._newRollAndDist();
-            this._cycleLeft = 0;
-          }
-        }
-      },
+  _place: function () {
+    // NEW: convert local offset (this.cur) into world position at the head
+    if (this.cameraEl) {
+      this.cameraEl.object3D.getWorldPosition(this.origin);
+      this.el.object3D.position.copy(this.origin).add(this.cur);
+    } else {
+      this.el.object3D.position.copy(this.cur);
+    }
+  },
 
-      _advanceCycleIfNeeded: function (dt) {
-        const d = this.data;
-        if ((d.mode || 'cycle').toLowerCase() !== 'cycle') return;
+  _newRollAndDist: function () {
+    const d = this.data;
+    this._rollRad = THREE.MathUtils.degToRad((Math.random()*2 - 1) * d.rollRangeDeg);
+    this._dist = this._rand(d.distMin, d.distMax);
+  },
 
-        this._cycleLeft -= dt;
-        if (this._cycleLeft <= 0) {
-          this._cycleIdx = (this._cycleIdx + 1) % this._cycle.length;
-          this._mode = this._cycle[this._cycleIdx] || 'drift';
-          this._cycleLeft = this._rand(d.cycleMinSec, d.cycleMaxSec);
-          this._t = 0;
-          this._hold = 0;
-          this._newRollAndDist();
-          if (this._mode === 'drift' || this._mode === 'jumps') this._pickNewDest(true);
-        }
-      },
+  _resolveMode: function (forceReset) {
+    const d = this.data;
+    const requested = (d.mode || 'cycle').toLowerCase();
 
-      _pickNewDest: function (snap) {
-        const d = this.data;
-        const amp = (this._mode === 'jumps') ? d.jumpAmplitude : 1.0;
-        const p = this._pickEnvelopePoint(amp);
-
-        // Roll varies per segment but remains stable while you pursue
-        this._rollRad = THREE.MathUtils.degToRad((Math.random()*2 - 1) * d.rollRangeDeg);
-
-        const v = new THREE.Vector3(p.x, p.y, p.z);
-        this.dest.copy(this._applyRollAndNeutral(v, this._rollRad));
-        this._hold = this._rand(d.holdMin, d.holdMax);
-
-        if (snap) {
-          this.cur.copy(this.dest);
-          this.el.object3D.position.copy(this.cur);
-        }
-      },
-
-      _snapToInitial: function () {
-        this._t = 0;
-        this._hold = 0;
-
-        // Start with a stable "straight-ahead" point at the current distance
+    if (requested === 'cycle') {
+      if (forceReset || !this._cycleLeft || !this._cycle.length) {
+        this._cycleIdx = this._cycleIdx % this._cycle.length;
+        this._mode = this._cycle[this._cycleIdx] || 'drift';
+        this._cycleLeft = this._rand(d.cycleMinSec, d.cycleMaxSec);
         this._newRollAndDist();
-        const v0 = new THREE.Vector3(0, 0, -this._dist);
-        this.cur.copy(this._applyRollAndNeutral(v0, 0));
-        this.el.object3D.position.copy(this.cur);
-
-        // For drift/jumps also pick a next dest
-        if (this._mode === 'drift' || this._mode === 'jumps') {
-          this._pickNewDest(false);
-        }
-      },
-
-      tick: function (time, timeDelta) {
-        const d = this.data;
-        const dt = Math.min(timeDelta / 1000, 0.05);
-
-        this._resolveMode(false);
-        this._advanceCycleIfNeeded(dt);
-        this._t += dt;
-
-        if (this._mode === 'circle') {
-          const period = Math.max(4.0, d.circlePeriodSec);
-          const w = (2 * Math.PI) / period;
-
-          const yawMax   = THREE.MathUtils.degToRad(d.yawRangeDeg);
-          const pitchMax = THREE.MathUtils.degToRad(d.pitchRangeDeg);
-          const rx = Math.tan(yawMax)   * this._dist;
-          const ry = Math.tan(pitchMax) * this._dist;
-
-          const a = w * this._t;
-          const v = new THREE.Vector3(rx * Math.cos(a), ry * Math.sin(a), -this._dist);
-
-          this.dest.copy(this._applyRollAndNeutral(v, this._rollRad));
-          this.cur.lerp(this.dest, d.smooth);
-          this.el.object3D.position.copy(this.cur);
-          return;
-        }
-
-        if (this._mode === 'figure8') {
-          const period = Math.max(5.0, d.fig8PeriodSec);
-          const w = (2 * Math.PI) / period;
-
-          const yawMax   = THREE.MathUtils.degToRad(d.yawRangeDeg);
-          const pitchMax = THREE.MathUtils.degToRad(d.pitchRangeDeg);
-          const rx = Math.tan(yawMax)   * this._dist;
-          const ry = Math.tan(pitchMax) * this._dist;
-
-          const a = w * this._t;
-          const v = new THREE.Vector3(rx * Math.sin(a), ry * 0.5 * Math.sin(2 * a), -this._dist);
-
-          this.dest.copy(this._applyRollAndNeutral(v, this._rollRad));
-          this.cur.lerp(this.dest, d.smooth);
-          this.el.object3D.position.copy(this.cur);
-          return;
-        }
-
-        // drift + jumps
-        const distToDest = this.cur.distanceTo(this.dest);
-        if (distToDest < 0.03) {
-          this._hold -= dt;
-          if (this._hold <= 0) this._pickNewDest(false);
-          return;
-        }
-
-        const step = Math.max(0.01, d.speed) * dt;
-        this.tmp.copy(this.dest).sub(this.cur);
-        const len = this.tmp.length();
-        if (len > 0) this.tmp.multiplyScalar(Math.min(step / len, 1));
-        this.cur.add(this.tmp);
-
-        if (d.smooth > 0) this.cur.lerp(this.dest, d.smooth * 0.25);
-        this.el.object3D.position.copy(this.cur);
       }
-    });
+    } else {
+      this._mode = requested;
+      if (forceReset) {
+        this._newRollAndDist();
+        this._cycleLeft = 0;
+      }
+    }
+  },
 
+  _advanceCycleIfNeeded: function (dt) {
+    const d = this.data;
+    if ((d.mode || 'cycle').toLowerCase() !== 'cycle') return;
+
+    this._cycleLeft -= dt;
+    if (this._cycleLeft <= 0) {
+      this._cycleIdx = (this._cycleIdx + 1) % this._cycle.length;
+      this._mode = this._cycle[this._cycleIdx] || 'drift';
+      this._cycleLeft = this._rand(d.cycleMinSec, d.cycleMaxSec);
+      this._t = 0;
+      this._hold = 0;
+      this._newRollAndDist();
+      if (this._mode === 'drift' || this._mode === 'jumps') this._pickNewDest(true);
+    }
+  },
+
+  _pickNewDest: function (snap) {
+    const d = this.data;
+    const amp = (this._mode === 'jumps') ? d.jumpAmplitude : 1.0;
+    const p = this._pickEnvelopePoint(amp);
+
+    this._rollRad = THREE.MathUtils.degToRad((Math.random()*2 - 1) * d.rollRangeDeg);
+
+    const v = new THREE.Vector3(p.x, p.y, p.z);
+    this.dest.copy(this._applyRollAndNeutral(v, this._rollRad));
+    this._hold = this._rand(d.holdMin, d.holdMax);
+
+    if (snap) {
+      this.cur.copy(this.dest);
+      this._place();
+    }
+  },
+
+  _snapToInitial: function () {
+    this._t = 0;
+    this._hold = 0;
+
+    this._newRollAndDist();
+    const v0 = new THREE.Vector3(0, 0, -this._dist);
+    this.cur.copy(this._applyRollAndNeutral(v0, 0));
+    this._place();
+
+    if (this._mode === 'drift' || this._mode === 'jumps') {
+      this._pickNewDest(false);
+    }
+  },
+
+  tick: function (time, timeDelta) {
+    const d = this.data;
+    const dt = Math.min(timeDelta / 1000, 0.05);
+
+    this._resolveMode(false);
+    this._advanceCycleIfNeeded(dt);
+    this._t += dt;
+
+    if (this._mode === 'circle') {
+      const period = Math.max(4.0, d.circlePeriodSec);
+      const w = (2 * Math.PI) / period;
+
+      const yawMax   = THREE.MathUtils.degToRad(d.yawRangeDeg);
+      const pitchMax = THREE.MathUtils.degToRad(d.pitchRangeDeg);
+      const rx = Math.tan(yawMax) * this._dist;
+      const ry = Math.tan(pitchMax) * this._dist;
+
+      const a = w * this._t;
+      const v = new THREE.Vector3(rx * Math.cos(a), ry * Math.sin(a), -this._dist);
+
+      this.dest.copy(this._applyRollAndNeutral(v, this._rollRad));
+      this.cur.lerp(this.dest, d.smooth);
+      this._place();
+      return;
+    }
+
+    if (this._mode === 'figure8') {
+      const period = Math.max(5.0, d.fig8PeriodSec);
+      const w = (2 * Math.PI) / period;
+
+      const yawMax   = THREE.MathUtils.degToRad(d.yawRangeDeg);
+      const pitchMax = THREE.MathUtils.degToRad(d.pitchRangeDeg);
+      const rx = Math.tan(yawMax) * this._dist;
+      const ry = Math.tan(pitchMax) * this._dist;
+
+      const a = w * this._t;
+      const v = new THREE.Vector3(rx * Math.sin(a), ry * 0.5 * Math.sin(2 * a), -this._dist);
+
+      this.dest.copy(this._applyRollAndNeutral(v, this._rollRad));
+      this.cur.lerp(this.dest, d.smooth);
+      this._place();
+      return;
+    }
+
+    const distToDest = this.cur.distanceTo(this.dest);
+    if (distToDest < 0.03) {
+      this._hold -= dt;
+      if (this._hold <= 0) this._pickNewDest(false);
+      return;
+    }
+
+    const step = Math.max(0.01, d.speed) * dt;
+    this.tmp.copy(this.dest).sub(this.cur);
+    const len = this.tmp.length();
+    if (len > 0) this.tmp.multiplyScalar(Math.min(step / len, 1));
+    this.cur.add(this.tmp);
+
+    if (d.smooth > 0) this.cur.lerp(this.dest, d.smooth * 0.25);
+    this._place();
+  }
+});
+    
+     
+   
     /***********************
      * UI + Calibration logic
      ************************/
