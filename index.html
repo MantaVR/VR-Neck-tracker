@@ -159,7 +159,7 @@
     let trainingActive = false;
     let trainingEndsAt = 0;
 
-    const STORAGE_KEY = 'trainer_rom_v9';
+    const STORAGE_KEY = 'trainer_rom_v10';
     const CAL = { idle:'idle', yaw:'yaw', pitch:'pitch', roll:'roll', done:'done' };
     let calPhase = CAL.idle;
     let extremes = null;
@@ -359,17 +359,19 @@
     AFRAME.registerComponent('coral-growth', {
       init: function() {
         this.stage = 0;
-        this.baseScale = 1.0;
-        this.maxStage = 10;
-        this.el.object3D.scale.setScalar(this.baseScale);
+        this.el.object3D.scale.set(1.0, 1.0, 1.0);
       },
       resetGrowth: function() {
         this.stage = 0;
         this.el.object3D.scale.set(1.0, 1.0, 1.0);
+        const glows = this.el.querySelectorAll('.coralGlow');
+        glows.forEach((g, idx) => {
+          g.setAttribute('material',
+            `color: ${idx % 2 === 0 ? '#ff7ad6' : '#7afff0'}; emissive: ${idx % 2 === 0 ? '#ff7ad6' : '#7afff0'}; emissiveIntensity: 0.55; opacity: 0.96`);
+        });
       },
       grow: function() {
-        this.stage = Math.min(this.maxStage, this.stage + 1);
-
+        this.stage = Math.min(10, this.stage + 1);
         const s = 1.0 + 0.18 * this.stage;
         this.el.object3D.scale.set(s * 0.95, s * 1.10, s * 0.95);
 
@@ -378,12 +380,6 @@
           const base = 0.55 + 0.10 * this.stage + idx * 0.04;
           g.setAttribute('material',
             `color: ${idx % 2 === 0 ? '#ff7ad6' : '#7afff0'}; emissive: ${idx % 2 === 0 ? '#ff7ad6' : '#7afff0'}; emissiveIntensity: ${base}; opacity: 0.96`);
-        });
-
-        const trunks = this.el.querySelectorAll('.coralBranch');
-        trunks.forEach((b, idx) => {
-          const y = 0.18 + 0.02 * this.stage + idx * 0.01;
-          b.setAttribute('position', `${b.getAttribute('position').x || 0} ${y} ${b.getAttribute('position').z || 0}`);
         });
       }
     });
@@ -606,6 +602,7 @@
         this.failFlashTimer = 0;
 
         this.worldHead = new THREE.Vector3();
+        this.sessionOriginWorld = new THREE.Vector3();
         this._onSelect = this._onSelect.bind(this);
       },
 
@@ -654,6 +651,9 @@
 
         this.centerDistance = 4.0;
         this.centerLocal.set(0, 0, -this.centerDistance);
+
+        // FIX: freeze origin for the whole tracing session so visible targets and gaze checks match
+        this.cameraEl.object3D.getWorldPosition(this.sessionOriginWorld);
 
         const yawHalf = (rom.yawROM / 2) * 0.95;
         const pitchHalf = (rom.pitchROM / 2) * 0.95;
@@ -717,8 +717,8 @@
       _localToWorld: function(localVec) {
         const world = localVec.clone();
         if (window.qNeutral) world.applyQuaternion(window.qNeutral);
-        this.cameraEl.object3D.getWorldPosition(this.worldHead);
-        world.add(this.worldHead);
+        // FIX: use frozen session origin, not current head position
+        world.add(this.sessionOriginWorld);
         return world;
       },
 
@@ -952,15 +952,15 @@
         if (!this.cameraEl || !window.qNeutral || !window.baselineROM) return;
         if (this.waitingForExitPress) return;
 
-        const dt = Math.min(timeDelta / 1000, 0.05);
         const p = this._getViewPointOnPlane();
         if (!p) return;
 
-        const ballTol = 0.20;            // widened tolerance
+        const dt = Math.min(timeDelta / 1000, 0.05);
+        const ballTol = 0.20;
         const forwardRate = 0.16;
         const rollbackRate = 0.06;
-        const startAngleTolDeg = 6.0;
-        const finishAngleTolDeg = 6.0;
+        const startAngleTolDeg = 7.5;   // slightly looser
+        const finishAngleTolDeg = 7.5;  // slightly looser
 
         if (this.failFlashTimer > 0) {
           this.failFlashTimer -= dt;
@@ -1011,12 +1011,9 @@
 
           if (within) {
             this.ballProgress = clamp(this.ballProgress + forwardRate * dt, 0, 1);
-
-            // gentler scoring falloff
             const norm = clamp(dToBall / ballTol, 0, 1);
             const acc = 1 - Math.pow(norm, 1.6);
             this.accuracySamples.push(acc);
-
             this._setBallNormal();
           } else {
             this.ballProgress = clamp(this.ballProgress - rollbackRate * dt, 0, 1);
@@ -1062,6 +1059,7 @@
             this.state = 'trialComplete';
             this._showHud(`Trial ${this.trialIndex + 1}/10\nPearl delivered\nScore: ${score.toFixed(1)}%`);
             this._hideHoldTimer();
+
             setTimeout(() => {
               if (window.trainingActive && window.trainingMode === 'curveTrace' && !this.waitingForExitPress) {
                 this._nextTrial();
