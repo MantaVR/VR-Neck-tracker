@@ -3,13 +3,13 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Head Pursuit Trainer + Curve Tracing (Quest)</title>
+  <title>Head Pursuit Trainer + Coral Tracing (Quest)</title>
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
   <style>
-    body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background:#050816; }
+    body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background:#061627; }
     .panel {
       position: fixed; left: 12px; top: 12px; z-index: 30;
-      width: min(620px, calc(100vw - 24px));
+      width: min(640px, calc(100vw - 24px));
       background: rgba(0,0,0,0.74); color: #fff;
       padding: 12px 12px 10px; border-radius: 12px;
       box-shadow: 0 10px 30px rgba(0,0,0,0.35);
@@ -44,9 +44,9 @@
 
 <body>
   <div class="panel" id="ui">
-    <div class="title">Head Pursuit Trainer — Pursuit + Curve Tracing</div>
+    <div class="title">Head Pursuit Trainer — Pursuit + Coral Tracing</div>
     <div class="mini">
-      Modes: continuous pursuit or 10-trial curve tracing game. Quest stationary boundary supported.
+      Modes: continuous pursuit or 10-trial coral tracing game. Quest stationary boundary supported.
     </div>
 
     <div class="grid">
@@ -75,7 +75,7 @@
         <div class="mini" style="margin-bottom:6px;">Mode</div>
         <select id="modeSelect">
           <option value="pursuit" selected>Continuous pursuit</option>
-          <option value="curveTrace">Curve tracing (10 trials)</option>
+          <option value="curveTrace">Coral tracing (10 trials)</option>
         </select>
       </div>
 
@@ -159,7 +159,7 @@
     let trainingActive = false;
     let trainingEndsAt = 0;
 
-    const STORAGE_KEY = 'trainer_rom_v6';
+    const STORAGE_KEY = 'trainer_rom_v7';
     const CAL = { idle:'idle', yaw:'yaw', pitch:'pitch', roll:'roll', done:'done' };
     let calPhase = CAL.idle;
     let extremes = null;
@@ -323,27 +323,65 @@
       updateResultsUI();
     }
 
-    AFRAME.registerComponent('starfield', {
-      schema: { count: {type:'int', default:1000}, radius:{type:'number', default:70}, size:{type:'number', default:0.06} },
-      init: function () {
+    /* ---------------- Underwater environment ---------------- */
+
+    AFRAME.registerComponent('underwater-particles', {
+      schema: {
+        count: { type:'int', default: 1400 },
+        radius: { type:'number', default: 26 },
+        height: { type:'number', default: 14 },
+        size: { type:'number', default: 0.05 }
+      },
+      init: function() {
         const d = this.data;
         const positions = new Float32Array(d.count * 3);
         for (let i = 0; i < d.count; i++) {
-          const u = Math.random();
-          const v = Math.random();
-          const theta = 2 * Math.PI * u;
-          const phi = Math.acos(2 * v - 1);
-          const r = d.radius * (0.85 + 0.15 * Math.random());
-          positions[i*3+0] = r * Math.sin(phi) * Math.cos(theta);
-          positions[i*3+1] = r * Math.cos(phi);
-          positions[i*3+2] = r * Math.sin(phi) * Math.sin(theta);
+          positions[i*3+0] = (Math.random()*2 - 1) * d.radius;
+          positions[i*3+1] = Math.random() * d.height;
+          positions[i*3+2] = (Math.random()*2 - 1) * d.radius;
         }
         const geom = new THREE.BufferGeometry();
         geom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-        const mat = new THREE.PointsMaterial({ size:d.size, sizeAttenuation:true, color:0xffffff, transparent:true, opacity:0.55 });
-        this.el.setObject3D('mesh', new THREE.Points(geom, mat));
+        const mat = new THREE.PointsMaterial({
+          size: d.size,
+          sizeAttenuation: true,
+          color: 0xbfefff,
+          transparent: true,
+          opacity: 0.35
+        });
+        this.points = new THREE.Points(geom, mat);
+        this.el.setObject3D('mesh', this.points);
       }
     });
+
+    /* ---------------- Coral growth ---------------- */
+
+    AFRAME.registerComponent('coral-growth', {
+      init: function() {
+        this.stage = 0;
+        this.baseScale = 0.85;
+        this.maxStage = 10;
+        this.el.object3D.scale.setScalar(this.baseScale);
+      },
+      resetGrowth: function() {
+        this.stage = 0;
+        this.el.object3D.scale.setScalar(this.baseScale);
+      },
+      grow: function() {
+        this.stage = Math.min(this.maxStage, this.stage + 1);
+        const s = this.baseScale + 0.08 * this.stage;
+        this.el.object3D.scale.setScalar(s);
+
+        // brighten coral lights gradually
+        const glows = this.el.querySelectorAll('.coralGlow');
+        glows.forEach((g, idx) => {
+          const base = 0.45 + 0.05 * this.stage + idx * 0.03;
+          g.setAttribute('material', `color: ${idx % 2 === 0 ? '#ff7ad6' : '#7afff0'}; emissive: ${idx % 2 === 0 ? '#ff7ad6' : '#7afff0'}; emissiveIntensity: ${base}; opacity: 0.92`);
+        });
+      }
+    });
+
+    /* ---------------- Pursuit mode ---------------- */
 
     AFRAME.registerComponent('pursuit3axis', {
       schema: {
@@ -529,6 +567,8 @@
       }
     });
 
+    /* ---------------- Coral tracing mode ---------------- */
+
     AFRAME.registerComponent('curve-trace-controller', {
       init: function () {
         this.cameraEl = document.querySelector('a-camera');
@@ -536,6 +576,8 @@
         this.hudEl = document.querySelector('#traceHud');
         this.centerEl = document.querySelector('#traceCenter');
         this.startEl = document.querySelector('#traceStart');
+        this.ballEl = document.querySelector('#traceBall');
+        this.coralEl = document.querySelector('#centralCoral');
 
         this.curveLine = null;
         this.corridorPoints = [];
@@ -545,48 +587,48 @@
         this.state = 'idle';
         this.trials = [];
         this.trialIndex = -1;
-        this.holdTime = 0;
+        this.startHoldTime = 0;
         this.endHoldTime = 0;
-        this.scoreSamples = [];
-        this.progressIdx = 0;
+        this.accuracySamples = [];
+        this.ballProgress = 0;
+        this.ballIdx = 0;
         this.finishReached = false;
         this.sessionScores = [];
         this.currentTrialMeta = null;
         this.waitingForExitPress = false;
+        this.failFlashTimer = 0;
 
         this.worldHead = new THREE.Vector3();
         this._onSelect = this._onSelect.bind(this);
       },
 
-      remove: function() {
-        this.sceneElRef.removeEventListener('enter-vr', this._setupXRListeners);
-      },
-
       resetSession: function() {
         this.state = 'idle';
         this.trialIndex = -1;
-        this.holdTime = 0;
+        this.startHoldTime = 0;
         this.endHoldTime = 0;
-        this.scoreSamples = [];
-        this.progressIdx = 0;
+        this.accuracySamples = [];
+        this.ballProgress = 0;
+        this.ballIdx = 0;
         this.finishReached = false;
         this.sessionScores = [];
         this.currentTrialMeta = null;
         this.waitingForExitPress = false;
+        this.failFlashTimer = 0;
         this._clearCurveVisuals();
         this._hideAll();
         this._detachControllerListeners();
+        const coralComp = this.coralEl.components['coral-growth'];
+        if (coralComp) coralComp.resetGrowth();
       },
 
       _attachControllerListeners: function() {
-        if (!this.sceneElRef) return;
         this.sceneElRef.addEventListener('triggerdown', this._onSelect);
         this.sceneElRef.addEventListener('abuttondown', this._onSelect);
         this.sceneElRef.addEventListener('xbuttondown', this._onSelect);
       },
 
       _detachControllerListeners: function() {
-        if (!this.sceneElRef) return;
         this.sceneElRef.removeEventListener('triggerdown', this._onSelect);
         this.sceneElRef.removeEventListener('abuttondown', this._onSelect);
         this.sceneElRef.removeEventListener('xbuttondown', this._onSelect);
@@ -611,7 +653,7 @@
         const pitchHalf = (rom.pitchROM / 2) * 0.95;
 
         this.trials = this._generateBalancedTrials(yawHalf, pitchHalf);
-        this._showHud('Curve tracing\nPreparing...');
+        this._showHud('Coral tracing\nPreparing...');
         this._nextTrial();
       },
 
@@ -623,19 +665,19 @@
         this.waitingForExitPress = true;
         this._attachControllerListeners();
         this._showHud(
-          `Session complete\nAvg ${avg.toFixed(1)}%  Best ${best.toFixed(1)}%  Worst ${worst.toFixed(1)}%\n\nPress trigger to return`
+          `Coral complete\nAvg ${avg.toFixed(1)}%  Best ${best.toFixed(1)}%  Worst ${worst.toFixed(1)}%\n\nPress trigger to return`
         );
-        calStatus.textContent = `Curve tracing complete. Avg ${avg.toFixed(1)}%, best ${best.toFixed(1)}%, worst ${worst.toFixed(1)}%. Press trigger to return.`;
+        calStatus.textContent = `Coral tracing complete. Avg ${avg.toFixed(1)}%, best ${best.toFixed(1)}%, worst ${worst.toFixed(1)}%. Press trigger to return.`;
       },
 
       _generateBalancedTrials: function(yawHalf, pitchHalf) {
         const minYaw = 20;
         const minPitch = 20;
 
-        const yawLarge = clamp(yawHalf * 0.80, minYaw, yawHalf);
-        const yawSmall = clamp(Math.max(minYaw, yawHalf * 0.55), minYaw, yawHalf);
-        const pitchLarge = clamp(pitchHalf * 0.80, minPitch, pitchHalf);
-        const pitchSmall = clamp(Math.max(minPitch, pitchHalf * 0.55), minPitch, pitchHalf);
+        const yawLarge = clamp(yawHalf * 0.82, minYaw, yawHalf);
+        const yawSmall = clamp(Math.max(minYaw, yawHalf * 0.58), minYaw, yawHalf);
+        const pitchLarge = clamp(pitchHalf * 0.82, minPitch, pitchHalf);
+        const pitchSmall = clamp(Math.max(minPitch, pitchHalf * 0.58), minPitch, pitchHalf);
 
         const defs = [
           {x:-yawLarge, y:+pitchLarge, zone:'leftAbove'},
@@ -651,12 +693,10 @@
         ];
 
         return defs.map(d => {
-          let yawJ = d.x + (Math.random()*2 - 1) * 1.5;
-          let pitchJ = d.y + (Math.random()*2 - 1) * 1.5;
-
+          let yawJ = d.x + (Math.random()*2 - 1) * 1.2;
+          let pitchJ = d.y + (Math.random()*2 - 1) * 1.2;
           if (Math.abs(yawJ) < minYaw) yawJ = Math.sign(yawJ || d.x || 1) * minYaw;
           if (Math.abs(pitchJ) < minPitch) pitchJ = Math.sign(pitchJ || d.y || 1) * minPitch;
-
           return { yawDeg: yawJ, pitchDeg: pitchJ, zone: d.zone };
         });
       },
@@ -687,7 +727,7 @@
       },
 
       _buildCurveLocal: function(startLocal, centerLocal) {
-        const n = 80;
+        const n = 90;
         const curve = [];
         const x0 = startLocal.x;
         const y0 = startLocal.y;
@@ -708,7 +748,7 @@
       _drawCurveAndCorridor: function(curveLocal, active=false) {
         this._clearCurveVisuals();
 
-        const color = active ? '#44ff88' : '#ffcc66';
+        const lineColor = active ? '#45ffd7' : '#7cb8ff';
         const positions = [];
         for (const p of curveLocal) {
           const w = this._localToWorld(p);
@@ -717,23 +757,37 @@
 
         const geom = new THREE.BufferGeometry();
         geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-        const mat = new THREE.LineBasicMaterial({ color, transparent:true, opacity:0.95 });
+        const mat = new THREE.LineBasicMaterial({ color: lineColor, transparent:true, opacity:0.85 });
         this.curveLine = new THREE.Line(geom, mat);
         this.el.sceneEl.object3D.add(this.curveLine);
 
-        const corridorColor = active ? '#44ff88' : '#88bbff';
-        const every = 3;
-        for (let i = 0; i < curveLocal.length; i += every) {
+        for (let i = 0; i < curveLocal.length; i += 2) {
           const sphere = document.createElement('a-sphere');
-          sphere.setAttribute('radius', '0.07');
+          sphere.setAttribute('radius', '0.075');
           sphere.setAttribute('segments-width', '10');
           sphere.setAttribute('segments-height', '8');
-          sphere.setAttribute('material', `color: ${corridorColor}; opacity: 0.18; transparent: true; emissive: ${corridorColor}; emissiveIntensity: 0.25`);
+          sphere.setAttribute('class', 'corridorDot');
           const wp = this._localToWorld(curveLocal[i]);
           sphere.setAttribute('position', `${wp.x} ${wp.y} ${wp.z}`);
+          sphere.setAttribute('material', `color: ${active ? '#45ffd7' : '#88bbff'}; opacity: 0.08; transparent: true; emissive: ${active ? '#45ffd7' : '#88bbff'}; emissiveIntensity: 0.18`);
           this.el.sceneEl.appendChild(sphere);
           this.corridorPoints.push(sphere);
         }
+      },
+
+      _updateCorridorAppearance: function() {
+        const total = this.corridorPoints.length;
+        if (!total) return;
+
+        const litIndex = Math.floor((this.ballProgress || 0) * total);
+        this.corridorPoints.forEach((el, i) => {
+          const ahead = i >= litIndex;
+          const nearBall = Math.abs(i - litIndex) < 4;
+          const opacity = ahead ? (nearBall ? 0.34 : 0.22) : 0.05;
+          const emissiveIntensity = ahead ? (nearBall ? 0.70 : 0.35) : 0.10;
+          el.setAttribute('material',
+            `color: #45ffd7; opacity: ${opacity}; transparent: true; emissive: #45ffd7; emissiveIntensity: ${emissiveIntensity}`);
+        });
       },
 
       _clearCurveVisuals: function() {
@@ -752,9 +806,9 @@
         this.hudEl.setAttribute('text', {
           value: text,
           align: 'center',
-          width: 2.0,
+          width: 2.1,
           color: '#FFFFFF',
-          wrapCount: 28
+          wrapCount: 30
         });
       },
 
@@ -762,6 +816,25 @@
         this.hudEl.setAttribute('visible', 'false');
         this.centerEl.setAttribute('visible', 'false');
         this.startEl.setAttribute('visible', 'false');
+        this.ballEl.setAttribute('visible', 'false');
+      },
+
+      _placeBallAtProgress: function(p) {
+        const idxFloat = clamp(p, 0, 1) * (this.curveLocal.length - 1);
+        const idx0 = Math.floor(idxFloat);
+        const idx1 = Math.min(this.curveLocal.length - 1, idx0 + 1);
+        const t = idxFloat - idx0;
+        const local = this.curveLocal[idx0].clone().lerp(this.curveLocal[idx1], t);
+        const world = this._localToWorld(local);
+        this.ballEl.setAttribute('position', `${world.x} ${world.y} ${world.z}`);
+      },
+
+      _setBallNormal: function() {
+        this.ballEl.setAttribute('material', 'color: #fff8d6; emissive: #fff8d6; emissiveIntensity: 0.95; opacity: 0.98');
+      },
+
+      _setBallFail: function() {
+        this.ballEl.setAttribute('material', 'color: #ff6666; emissive: #ff6666; emissiveIntensity: 0.95; opacity: 0.98');
       },
 
       _nextTrial: function() {
@@ -773,11 +846,13 @@
         }
 
         this.currentTrialMeta = this.trials[this.trialIndex];
-        this.holdTime = 0;
+        this.startHoldTime = 0;
         this.endHoldTime = 0;
-        this.scoreSamples = [];
-        this.progressIdx = 0;
+        this.accuracySamples = [];
+        this.ballProgress = 0;
+        this.ballIdx = 0;
         this.finishReached = false;
+        this.failFlashTimer = 0;
 
         const startLocal = this._localFromAngles(this.currentTrialMeta.yawDeg, this.currentTrialMeta.pitchDeg, this.centerDistance);
         this.startLocal = startLocal.clone();
@@ -788,16 +863,22 @@
 
         this.centerEl.setAttribute('position', `${centerWorld.x} ${centerWorld.y} ${centerWorld.z}`);
         this.centerEl.setAttribute('visible', 'true');
-        this.centerEl.setAttribute('radius', '0.06');
-        this.centerEl.setAttribute('material', 'color: #66ccff; emissive: #66ccff; emissiveIntensity: 0.8; opacity: 0.95');
+        this.centerEl.setAttribute('radius', '0.07');
+        this.centerEl.setAttribute('material', 'color: #66ccff; emissive: #66ccff; emissiveIntensity: 0.9; opacity: 0.96');
 
         this.startEl.setAttribute('position', `${startWorld.x} ${startWorld.y} ${startWorld.z}`);
         this.startEl.setAttribute('visible', 'true');
-        this.startEl.setAttribute('radius', '0.065');
-        this.startEl.setAttribute('material', 'color: #ffcc66; emissive: #ffcc66; emissiveIntensity: 0.8; opacity: 0.95');
+        this.startEl.setAttribute('radius', '0.07');
+        this.startEl.setAttribute('material', 'color: #ffd27a; emissive: #ffd27a; emissiveIntensity: 0.9; opacity: 0.96');
 
         this._drawCurveAndCorridor(this.curveLocal, false);
-        this._showHud(`Trial ${this.trialIndex + 1}/10\nAcquire start and hold 5.0 s`);
+
+        this.ballEl.setAttribute('visible', 'true');
+        this._setBallNormal();
+        this._placeBallAtProgress(0);
+        this._updateCorridorAppearance();
+
+        this._showHud(`Trial ${this.trialIndex + 1}/10\nCharge the pearl at the start\nHold 5.0 s`);
         this.state = 'acquireStart';
       },
 
@@ -807,26 +888,21 @@
         return Math.sqrt(dx*dx + dy*dy);
       },
 
-      _nearestCurveIndex: function(pointLocal, startIdx) {
-        let bestIdx = startIdx;
-        let bestD = Infinity;
-        for (let i = startIdx; i < this.curveLocal.length; i++) {
-          const d = this._distanceLocal2D(pointLocal, this.curveLocal[i]);
-          if (d < bestD) {
-            bestD = d;
-            bestIdx = i;
-          }
-        }
-        return { idx: bestIdx, dist: bestD };
+      _curvePointAtProgress: function(progress) {
+        const idxFloat = clamp(progress, 0, 1) * (this.curveLocal.length - 1);
+        const idx0 = Math.floor(idxFloat);
+        const idx1 = Math.min(this.curveLocal.length - 1, idx0 + 1);
+        const t = idxFloat - idx0;
+        return this.curveLocal[idx0].clone().lerp(this.curveLocal[idx1], t);
       },
 
       _computeTrialScore: function() {
-        const meanAcc = this.scoreSamples.length
-          ? this.scoreSamples.reduce((a,b)=>a+b,0) / this.scoreSamples.length
+        const meanAcc = this.accuracySamples.length
+          ? this.accuracySamples.reduce((a,b)=>a+b,0) / this.accuracySamples.length
           : 0;
 
         const S_acc = 100 * meanAcc;
-        const S_cov = 100 * (this.progressIdx / (this.curveLocal.length - 1));
+        const S_cov = 100 * this.ballProgress;
         const S_end = this.finishReached ? 100 : 0;
         return clamp(0.65*S_acc + 0.25*S_cov + 0.10*S_end, 0, 100);
       },
@@ -840,14 +916,21 @@
         const p = this._getViewPointOnPlane();
         if (!p) return;
 
-        const startTol = 0.10;
+        const startTol = 0.11;
         const finishTol = 0.11;
-        const corridorWidth = 0.12;
+        const ballTol = 0.12;
+        const forwardRate = 0.17;   // progress per second when within tolerance
+        const rollbackRate = 0.08;  // soft fail rollback per second
+
+        if (this.failFlashTimer > 0) {
+          this.failFlashTimer -= dt;
+          if (this.failFlashTimer <= 0) this._setBallNormal();
+        }
 
         if (this.state === 'acquireStart') {
           const d = this._distanceLocal2D(p, this.startLocal);
           if (d <= startTol) {
-            this.holdTime = 0;
+            this.startHoldTime = 0;
             this.state = 'holdStart';
           }
           return;
@@ -856,81 +939,90 @@
         if (this.state === 'holdStart') {
           const d = this._distanceLocal2D(p, this.startLocal);
           if (d > startTol) {
-            this.holdTime = 0;
+            this.startHoldTime = 0;
             this.state = 'acquireStart';
-            this._showHud(`Trial ${this.trialIndex + 1}/10\nAcquire start and hold 5.0 s`);
+            this._showHud(`Trial ${this.trialIndex + 1}/10\nCharge the pearl at the start\nHold 5.0 s`);
             return;
           }
 
-          this.holdTime += dt;
-          const remain = Math.max(0, 5.0 - this.holdTime);
-          this._showHud(`Trial ${this.trialIndex + 1}/10\nHold start: ${remain.toFixed(1)} s`);
+          this.startHoldTime += dt;
+          const remain = Math.max(0, 5.0 - this.startHoldTime);
+          this._showHud(`Trial ${this.trialIndex + 1}/10\nCharging start: ${remain.toFixed(1)} s`);
 
-          if (this.holdTime >= 5.0) {
+          if (this.startHoldTime >= 5.0) {
             this.state = 'traceActive';
-            this.progressIdx = 0;
-            this.scoreSamples = [];
+            this.ballProgress = 0;
             this.endHoldTime = 0;
+            this.accuracySamples = [];
             this._drawCurveAndCorridor(this.curveLocal, true);
-            this._showHud(`Trial ${this.trialIndex + 1}/10\nTrace the corridor to centre`);
+            this._updateCorridorAppearance();
+            this._showHud(`Trial ${this.trialIndex + 1}/10\nGuide the pearl to the coral`);
           }
           return;
         }
 
         if (this.state === 'traceActive') {
-          const nearest = this._nearestCurveIndex(p, Math.max(0, this.progressIdx - 2));
-          this.progressIdx = Math.max(this.progressIdx, nearest.idx);
+          const ballLocal = this._curvePointAtProgress(this.ballProgress);
+          const dToBall = this._distanceLocal2D(p, ballLocal);
+          const within = dToBall <= ballTol;
 
-          const acc = clamp(1 - (nearest.dist / corridorWidth), 0, 1);
-          this.scoreSamples.push(acc);
+          if (within) {
+            this.ballProgress = clamp(this.ballProgress + forwardRate * dt, 0, 1);
+            const acc = clamp(1 - (dToBall / ballTol), 0, 1);
+            this.accuracySamples.push(acc);
+            this._setBallNormal();
+          } else {
+            this.ballProgress = clamp(this.ballProgress - rollbackRate * dt, 0, 1);
+            this.failFlashTimer = 0.18;
+            this._setBallFail();
+            this._showHud(`Trial ${this.trialIndex + 1}/10\nPearl slipped - re-align`);
+          }
 
-          const dToCenter = this._distanceLocal2D(p, this.centerLocal);
-          const nearEnd = this.progressIdx >= this.curveLocal.length - 4;
+          this._placeBallAtProgress(this.ballProgress);
+          this._updateCorridorAppearance();
 
-          if (nearEnd && dToCenter <= finishTol) {
+          if (this.ballProgress >= 0.995) {
             this.state = 'holdFinish';
             this.endHoldTime = 0;
-            this._showHud(`Trial ${this.trialIndex + 1}/10\nHold finish: 5.0 s`);
+            this._showHud(`Trial ${this.trialIndex + 1}/10\nFeed the coral\nHold finish: 5.0 s`);
           }
           return;
         }
 
         if (this.state === 'holdFinish') {
-          const nearest = this._nearestCurveIndex(p, Math.max(0, this.progressIdx - 2));
-          this.progressIdx = Math.max(this.progressIdx, nearest.idx);
-
-          const acc = clamp(1 - (nearest.dist / corridorWidth), 0, 1);
-          this.scoreSamples.push(acc);
-
           const dToCenter = this._distanceLocal2D(p, this.centerLocal);
-          const nearEnd = this.progressIdx >= this.curveLocal.length - 4;
-
-          if (!(nearEnd && dToCenter <= finishTol)) {
+          if (dToCenter > finishTol) {
             this.endHoldTime = 0;
             this.state = 'traceActive';
-            this._showHud(`Trial ${this.trialIndex + 1}/10\nTrace the corridor to centre`);
+            this._showHud(`Trial ${this.trialIndex + 1}/10\nGuide the pearl to the coral`);
             return;
           }
 
           this.endHoldTime += dt;
           const remain = Math.max(0, 5.0 - this.endHoldTime);
-          this._showHud(`Trial ${this.trialIndex + 1}/10\nHold finish: ${remain.toFixed(1)} s`);
+          this._showHud(`Trial ${this.trialIndex + 1}/10\nFeeding coral: ${remain.toFixed(1)} s`);
 
           if (this.endHoldTime >= 5.0) {
             this.finishReached = true;
             const score = this._computeTrialScore();
             this.sessionScores.push(score);
+
+            const coralComp = this.coralEl.components['coral-growth'];
+            if (coralComp) coralComp.grow();
+
             this.state = 'trialComplete';
-            this._showHud(`Trial ${this.trialIndex + 1}/10\nScore: ${score.toFixed(1)}%`);
+            this._showHud(`Trial ${this.trialIndex + 1}/10\nPearl delivered\nScore: ${score.toFixed(1)}%`);
             setTimeout(() => {
               if (window.trainingActive && window.trainingMode === 'curveTrace' && !this.waitingForExitPress) {
                 this._nextTrial();
               }
-            }, 1700);
+            }, 1900);
           }
         }
       }
     });
+
+    /* ---------------- Training control ---------------- */
 
     function applyPursuitSettingsFromBaseline() {
       if (!baseline) return;
@@ -1001,7 +1093,7 @@
       } else {
         trainingEndsAt = Infinity;
         document.querySelector('#traceController').components['curve-trace-controller'].startSession();
-        calStatus.textContent = 'Curve tracing running (10 trials).';
+        calStatus.textContent = 'Coral tracing running (10 trials).';
       }
     }
 
@@ -1080,23 +1172,29 @@
 
   <a-scene webxr="referenceSpaceType: local-floor"
            renderer="colorManagement: true"
-           background="color: #030515"
+           background="color: #06243a"
+           fog="type: exponential; color: #08314a; density: 0.03"
            vr-mode-ui="enabled: true">
 
-    <a-entity starfield="count: 1200; radius: 75; size: 0.06"></a-entity>
-    <a-entity light="type: ambient; intensity: 0.8"></a-entity>
-    <a-entity light="type: directional; intensity: 0.5" position="1 2 1"></a-entity>
-    <a-plane rotation="-90 0 0" width="12" height="12" position="0 0 0"
-             material="color: #0b1536; opacity: 0.10"></a-plane>
+    <a-entity underwater-particles="count: 1500; radius: 28; height: 15; size: 0.05"
+              animation="property: rotation; to: 0 360 0; loop: true; dur: 280000; easing: linear"></a-entity>
+
+    <a-entity light="type: ambient; intensity: 0.85; color: #8cd8ff"></a-entity>
+    <a-entity light="type: directional; intensity: 0.55; color: #b6f0ff" position="1 3 1"></a-entity>
+    <a-entity light="type: point; intensity: 0.35; color: #52d8ff" position="0 3 -2"></a-entity>
+
+    <a-plane rotation="-90 0 0" width="18" height="18" position="0 0 0"
+             material="color: #183c2a; opacity: 0.18"></a-plane>
 
     <a-entity id="rig">
       <a-camera position="0 0 0">
         <a-entity position="0 0 -1"
                   geometry="primitive: ring; radiusInner: 0.012; radiusOuter: 0.016"
-                  material="color: #FFFFFF; shader: flat; opacity: 0.9"></a-entity>
+                  material="color: #FFFFFF; shader: flat; opacity: 0.92"></a-entity>
       </a-camera>
     </a-entity>
 
+    <!-- Pursuit target -->
     <a-entity id="star"
       pursuit3axis="mode: cycle; yawRangeDeg: 25; pitchRangeDeg: 15; rollRangeDeg: 10; distMin: 1.2; distMax: 2.2; speed: 0.20; jumpAmplitude: 0.7; arcBulge: 0.35;">
       <a-sphere radius="0.03"
@@ -1106,17 +1204,37 @@
                 animation="property: rotation; to: 0 360 0; loop: true; dur: 1800; easing: linear"></a-entity>
     </a-entity>
 
+    <!-- Central coral -->
+    <a-entity id="centralCoral" coral-growth position="0 0 -2.4">
+      <a-cylinder height="0.22" radius="0.05" color="#7b2a83" position="0 0.11 0"></a-cylinder>
+      <a-cylinder height="0.18" radius="0.035" color="#a84db6" position="-0.10 0.18 0.02" rotation="0 0 25"></a-cylinder>
+      <a-cylinder height="0.18" radius="0.035" color="#6c4fe0" position="0.11 0.18 -0.01" rotation="0 0 -22"></a-cylinder>
+      <a-cylinder height="0.16" radius="0.03" color="#ff6fc4" position="-0.03 0.24 0.06" rotation="0 0 18"></a-cylinder>
+      <a-cylinder height="0.16" radius="0.03" color="#65ffe7" position="0.05 0.25 -0.05" rotation="0 0 -18"></a-cylinder>
+
+      <a-sphere class="coralGlow" radius="0.055" position="-0.12 0.27 0.02"
+                material="color: #ff7ad6; emissive: #ff7ad6; emissiveIntensity: 0.45; opacity: 0.92"></a-sphere>
+      <a-sphere class="coralGlow" radius="0.05" position="0.13 0.26 -0.02"
+                material="color: #7afff0; emissive: #7afff0; emissiveIntensity: 0.45; opacity: 0.92"></a-sphere>
+      <a-sphere class="coralGlow" radius="0.045" position="0.0 0.31 0.03"
+                material="color: #ff7ad6; emissive: #ff7ad6; emissiveIntensity: 0.42; opacity: 0.92"></a-sphere>
+    </a-entity>
+
+    <!-- Trace controller and visuals -->
     <a-entity id="traceController" curve-trace-controller></a-entity>
 
-    <a-sphere id="traceCenter" visible="false" radius="0.06"
-              material="color: #66ccff; emissive: #66ccff; emissiveIntensity: 0.8; opacity: 0.95"></a-sphere>
+    <a-sphere id="traceCenter" visible="false" radius="0.07"
+              material="color: #66ccff; emissive: #66ccff; emissiveIntensity: 0.9; opacity: 0.96"></a-sphere>
 
-    <a-sphere id="traceStart" visible="false" radius="0.065"
-              material="color: #ffcc66; emissive: #ffcc66; emissiveIntensity: 0.8; opacity: 0.95"></a-sphere>
+    <a-sphere id="traceStart" visible="false" radius="0.07"
+              material="color: #ffd27a; emissive: #ffd27a; emissiveIntensity: 0.9; opacity: 0.96"></a-sphere>
+
+    <a-sphere id="traceBall" visible="false" radius="0.065"
+              material="color: #fff8d6; emissive: #fff8d6; emissiveIntensity: 0.95; opacity: 0.98"></a-sphere>
 
     <a-entity id="traceHud" visible="false"
-              position="0 1.85 -1.35"
-              text="value: ; align: center; width: 2.0; color: #FFFFFF"></a-entity>
+              position="0 1.95 -1.45"
+              text="value: ; align: center; width: 2.1; color: #FFFFFF"></a-entity>
 
   </a-scene>
 </body>
