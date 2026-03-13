@@ -159,7 +159,7 @@
     let trainingActive = false;
     let trainingEndsAt = 0;
 
-    const STORAGE_KEY = 'trainer_rom_v8';
+    const STORAGE_KEY = 'trainer_rom_v9';
     const CAL = { idle:'idle', yaw:'yaw', pitch:'pitch', roll:'roll', done:'done' };
     let calPhase = CAL.idle;
     let extremes = null;
@@ -327,9 +327,9 @@
 
     AFRAME.registerComponent('underwater-particles', {
       schema: {
-        count: { type:'int', default: 1400 },
-        radius: { type:'number', default: 26 },
-        height: { type:'number', default: 14 },
+        count: { type:'int', default: 1600 },
+        radius: { type:'number', default: 34 },
+        height: { type:'number', default: 20 },
         size: { type:'number', default: 0.05 }
       },
       init: function() {
@@ -337,7 +337,7 @@
         const positions = new Float32Array(d.count * 3);
         for (let i = 0; i < d.count; i++) {
           positions[i*3+0] = (Math.random()*2 - 1) * d.radius;
-          positions[i*3+1] = Math.random() * d.height;
+          positions[i*3+1] = Math.random() * d.height - 2;
           positions[i*3+2] = (Math.random()*2 - 1) * d.radius;
         }
         const geom = new THREE.BufferGeometry();
@@ -347,7 +347,7 @@
           sizeAttenuation: true,
           color: 0xbfefff,
           transparent: true,
-          opacity: 0.35
+          opacity: 0.28
         });
         this.points = new THREE.Points(geom, mat);
         this.el.setObject3D('mesh', this.points);
@@ -359,23 +359,31 @@
     AFRAME.registerComponent('coral-growth', {
       init: function() {
         this.stage = 0;
-        this.baseScale = 0.85;
+        this.baseScale = 1.0;
         this.maxStage = 10;
         this.el.object3D.scale.setScalar(this.baseScale);
       },
       resetGrowth: function() {
         this.stage = 0;
-        this.el.object3D.scale.setScalar(this.baseScale);
+        this.el.object3D.scale.set(1.0, 1.0, 1.0);
       },
       grow: function() {
         this.stage = Math.min(this.maxStage, this.stage + 1);
-        const s = this.baseScale + 0.08 * this.stage;
-        this.el.object3D.scale.setScalar(s);
+
+        const s = 1.0 + 0.18 * this.stage;
+        this.el.object3D.scale.set(s * 0.95, s * 1.10, s * 0.95);
 
         const glows = this.el.querySelectorAll('.coralGlow');
         glows.forEach((g, idx) => {
-          const base = 0.45 + 0.05 * this.stage + idx * 0.03;
-          g.setAttribute('material', `color: ${idx % 2 === 0 ? '#ff7ad6' : '#7afff0'}; emissive: ${idx % 2 === 0 ? '#ff7ad6' : '#7afff0'}; emissiveIntensity: ${base}; opacity: 0.92`);
+          const base = 0.55 + 0.10 * this.stage + idx * 0.04;
+          g.setAttribute('material',
+            `color: ${idx % 2 === 0 ? '#ff7ad6' : '#7afff0'}; emissive: ${idx % 2 === 0 ? '#ff7ad6' : '#7afff0'}; emissiveIntensity: ${base}; opacity: 0.96`);
+        });
+
+        const trunks = this.el.querySelectorAll('.coralBranch');
+        trunks.forEach((b, idx) => {
+          const y = 0.18 + 0.02 * this.stage + idx * 0.01;
+          b.setAttribute('position', `${b.getAttribute('position').x || 0} ${y} ${b.getAttribute('position').z || 0}`);
         });
       }
     });
@@ -577,11 +585,12 @@
         this.startEl = document.querySelector('#traceStart');
         this.ballEl = document.querySelector('#traceBall');
         this.coralEl = document.querySelector('#centralCoral');
+        this.holdTimerEl = document.querySelector('#holdTimerText');
 
         this.curveLine = null;
         this.corridorPoints = [];
         this.curveLocal = [];
-        this.centerLocal = new THREE.Vector3(0, 0, -2.4);
+        this.centerLocal = new THREE.Vector3(0, 0, -4.0);
 
         this.state = 'idle';
         this.trials = [];
@@ -643,7 +652,7 @@
         const rom = window.baselineROM;
         if (!rom || !window.qNeutral) return;
 
-        this.centerDistance = 2.4;
+        this.centerDistance = 4.0;
         this.centerLocal.set(0, 0, -this.centerDistance);
 
         const yawHalf = (rom.yawROM / 2) * 0.95;
@@ -664,6 +673,7 @@
         this._showHud(
           `Coral complete\nAvg ${avg.toFixed(1)}%  Best ${best.toFixed(1)}%  Worst ${worst.toFixed(1)}%\n\nPress trigger to return`
         );
+        this._hideHoldTimer();
         calStatus.textContent = `Coral tracing complete. Avg ${avg.toFixed(1)}%, best ${best.toFixed(1)}%, worst ${worst.toFixed(1)}%. Press trigger to return.`;
       },
 
@@ -775,13 +785,13 @@
 
         for (let i = 0; i < curveLocal.length; i += 2) {
           const sphere = document.createElement('a-sphere');
-          sphere.setAttribute('radius', '0.075');
+          sphere.setAttribute('radius', '0.11');
           sphere.setAttribute('segments-width', '10');
           sphere.setAttribute('segments-height', '8');
           sphere.setAttribute('class', 'corridorDot');
           const wp = this._localToWorld(curveLocal[i]);
           sphere.setAttribute('position', `${wp.x} ${wp.y} ${wp.z}`);
-          sphere.setAttribute('material', `color: ${active ? '#45ffd7' : '#88bbff'}; opacity: 0.08; transparent: true; emissive: ${active ? '#45ffd7' : '#88bbff'}; emissiveIntensity: 0.18`);
+          sphere.setAttribute('material', `color: ${active ? '#45ffd7' : '#88bbff'}; opacity: 0.06; transparent: true; emissive: ${active ? '#45ffd7' : '#88bbff'}; emissiveIntensity: 0.16`);
           this.el.sceneEl.appendChild(sphere);
           this.corridorPoints.push(sphere);
         }
@@ -795,8 +805,8 @@
         this.corridorPoints.forEach((el, i) => {
           const ahead = i >= litIndex;
           const nearBall = Math.abs(i - litIndex) < 4;
-          const opacity = ahead ? (nearBall ? 0.34 : 0.22) : 0.05;
-          const emissiveIntensity = ahead ? (nearBall ? 0.70 : 0.35) : 0.10;
+          const opacity = ahead ? (nearBall ? 0.28 : 0.18) : 0.04;
+          const emissiveIntensity = ahead ? (nearBall ? 0.65 : 0.28) : 0.08;
           el.setAttribute('material',
             `color: #45ffd7; opacity: ${opacity}; transparent: true; emissive: #45ffd7; emissiveIntensity: ${emissiveIntensity}`);
         });
@@ -829,6 +839,24 @@
         this.centerEl.setAttribute('visible', 'false');
         this.startEl.setAttribute('visible', 'false');
         this.ballEl.setAttribute('visible', 'false');
+        this._hideHoldTimer();
+      },
+
+      _showHoldTimerAtLocal: function(localTarget, secondsRemaining, label) {
+        const world = this._localToWorld(localTarget);
+        this.holdTimerEl.setAttribute('visible', 'true');
+        this.holdTimerEl.setAttribute('position', `${world.x} ${world.y + 0.18} ${world.z}`);
+        this.holdTimerEl.setAttribute('text', {
+          value: `${label}\n${secondsRemaining.toFixed(1)} s`,
+          align: 'center',
+          width: 1.2,
+          color: '#FFFFFF',
+          wrapCount: 14
+        });
+      },
+
+      _hideHoldTimer: function() {
+        this.holdTimerEl.setAttribute('visible', 'false');
       },
 
       _placeBallAtProgress: function(p) {
@@ -874,13 +902,13 @@
 
         this.centerEl.setAttribute('position', `${centerWorld.x} ${centerWorld.y} ${centerWorld.z}`);
         this.centerEl.setAttribute('visible', 'true');
-        this.centerEl.setAttribute('radius', '0.07');
-        this.centerEl.setAttribute('material', 'color: #66ccff; emissive: #66ccff; emissiveIntensity: 0.9; opacity: 0.96');
+        this.centerEl.setAttribute('radius', '0.11');
+        this.centerEl.setAttribute('material', 'color: #66ccff; emissive: #66ccff; emissiveIntensity: 1.0; opacity: 0.96');
 
         this.startEl.setAttribute('position', `${startWorld.x} ${startWorld.y} ${startWorld.z}`);
         this.startEl.setAttribute('visible', 'true');
-        this.startEl.setAttribute('radius', '0.07');
-        this.startEl.setAttribute('material', 'color: #ffd27a; emissive: #ffd27a; emissiveIntensity: 0.9; opacity: 0.96');
+        this.startEl.setAttribute('radius', '0.11');
+        this.startEl.setAttribute('material', 'color: #ffd27a; emissive: #ffd27a; emissiveIntensity: 1.0; opacity: 0.96');
 
         this._drawCurveAndCorridor(this.curveLocal, false);
 
@@ -889,7 +917,8 @@
         this._placeBallAtProgress(0);
         this._updateCorridorAppearance();
 
-        this._showHud(`Trial ${this.trialIndex + 1}/10\nCharge the pearl at the start\nHold 5.0 s`);
+        this._showHud(`Trial ${this.trialIndex + 1}/10\nCharge the pearl at the start`);
+        this._hideHoldTimer();
         this.state = 'acquireStart';
       },
 
@@ -927,11 +956,11 @@
         const p = this._getViewPointOnPlane();
         if (!p) return;
 
-        const ballTol = 0.12;
-        const forwardRate = 0.17;
-        const rollbackRate = 0.08;
-        const startAngleTolDeg = 5.0;
-        const finishAngleTolDeg = 5.0;
+        const ballTol = 0.20;            // widened tolerance
+        const forwardRate = 0.16;
+        const rollbackRate = 0.06;
+        const startAngleTolDeg = 6.0;
+        const finishAngleTolDeg = 6.0;
 
         if (this.failFlashTimer > 0) {
           this.failFlashTimer -= dt;
@@ -952,13 +981,15 @@
           if (ang > startAngleTolDeg) {
             this.startHoldTime = 0;
             this.state = 'acquireStart';
-            this._showHud(`Trial ${this.trialIndex + 1}/10\nCharge the pearl at the start\nHold 5.0 s`);
+            this._showHud(`Trial ${this.trialIndex + 1}/10\nCharge the pearl at the start`);
+            this._hideHoldTimer();
             return;
           }
 
           this.startHoldTime += dt;
           const remain = Math.max(0, 5.0 - this.startHoldTime);
-          this._showHud(`Trial ${this.trialIndex + 1}/10\nCharging start: ${remain.toFixed(1)} s`);
+          this._showHud(`Trial ${this.trialIndex + 1}/10\nCharge the pearl`);
+          this._showHoldTimerAtLocal(this.startLocal, remain, 'Hold');
 
           if (this.startHoldTime >= 5.0) {
             this.state = 'traceActive';
@@ -968,6 +999,7 @@
             this._drawCurveAndCorridor(this.curveLocal, true);
             this._updateCorridorAppearance();
             this._showHud(`Trial ${this.trialIndex + 1}/10\nGuide the pearl to the coral`);
+            this._hideHoldTimer();
           }
           return;
         }
@@ -979,8 +1011,12 @@
 
           if (within) {
             this.ballProgress = clamp(this.ballProgress + forwardRate * dt, 0, 1);
-            const acc = clamp(1 - (dToBall / ballTol), 0, 1);
+
+            // gentler scoring falloff
+            const norm = clamp(dToBall / ballTol, 0, 1);
+            const acc = 1 - Math.pow(norm, 1.6);
             this.accuracySamples.push(acc);
+
             this._setBallNormal();
           } else {
             this.ballProgress = clamp(this.ballProgress - rollbackRate * dt, 0, 1);
@@ -995,7 +1031,7 @@
           if (this.ballProgress >= 0.995) {
             this.state = 'holdFinish';
             this.endHoldTime = 0;
-            this._showHud(`Trial ${this.trialIndex + 1}/10\nFeed the coral\nHold finish: 5.0 s`);
+            this._showHud(`Trial ${this.trialIndex + 1}/10\nFeed the coral`);
           }
           return;
         }
@@ -1006,12 +1042,14 @@
             this.endHoldTime = 0;
             this.state = 'traceActive';
             this._showHud(`Trial ${this.trialIndex + 1}/10\nGuide the pearl to the coral`);
+            this._hideHoldTimer();
             return;
           }
 
           this.endHoldTime += dt;
           const remain = Math.max(0, 5.0 - this.endHoldTime);
-          this._showHud(`Trial ${this.trialIndex + 1}/10\nFeeding coral: ${remain.toFixed(1)} s`);
+          this._showHud(`Trial ${this.trialIndex + 1}/10\nFeed the coral`);
+          this._showHoldTimerAtLocal(this.centerLocal, remain, 'Hold');
 
           if (this.endHoldTime >= 5.0) {
             this.finishReached = true;
@@ -1023,6 +1061,7 @@
 
             this.state = 'trialComplete';
             this._showHud(`Trial ${this.trialIndex + 1}/10\nPearl delivered\nScore: ${score.toFixed(1)}%`);
+            this._hideHoldTimer();
             setTimeout(() => {
               if (window.trainingActive && window.trainingMode === 'curveTrace' && !this.waitingForExitPress) {
                 this._nextTrial();
@@ -1184,18 +1223,17 @@
   <a-scene webxr="referenceSpaceType: local-floor"
            renderer="colorManagement: true"
            background="color: #06243a"
-           fog="type: exponential; color: #08314a; density: 0.03"
+           fog="type: exponential; color: #08314a; density: 0.022"
            vr-mode-ui="enabled: true">
 
-    <a-entity underwater-particles="count: 1500; radius: 28; height: 15; size: 0.05"
+    <a-entity underwater-particles="count: 1600; radius: 34; height: 20; size: 0.05"
               animation="property: rotation; to: 0 360 0; loop: true; dur: 280000; easing: linear"></a-entity>
 
     <a-entity light="type: ambient; intensity: 0.85; color: #8cd8ff"></a-entity>
     <a-entity light="type: directional; intensity: 0.55; color: #b6f0ff" position="1 3 1"></a-entity>
     <a-entity light="type: point; intensity: 0.35; color: #52d8ff" position="0 3 -2"></a-entity>
 
-    <a-plane rotation="-90 0 0" width="18" height="18" position="0 0 0"
-             material="color: #183c2a; opacity: 0.18"></a-plane>
+    <!-- Floor removed -->
 
     <a-entity id="rig">
       <a-camera position="0 0 0">
@@ -1216,36 +1254,39 @@
     </a-entity>
 
     <!-- Central coral -->
-    <a-entity id="centralCoral" coral-growth position="0 0 -2.4">
-      <a-cylinder height="0.22" radius="0.05" color="#7b2a83" position="0 0.11 0"></a-cylinder>
-      <a-cylinder height="0.18" radius="0.035" color="#a84db6" position="-0.10 0.18 0.02" rotation="0 0 25"></a-cylinder>
-      <a-cylinder height="0.18" radius="0.035" color="#6c4fe0" position="0.11 0.18 -0.01" rotation="0 0 -22"></a-cylinder>
-      <a-cylinder height="0.16" radius="0.03" color="#ff6fc4" position="-0.03 0.24 0.06" rotation="0 0 18"></a-cylinder>
-      <a-cylinder height="0.16" radius="0.03" color="#65ffe7" position="0.05 0.25 -0.05" rotation="0 0 -18"></a-cylinder>
+    <a-entity id="centralCoral" coral-growth position="0 0 -4.0">
+      <a-cylinder class="coralBranch" height="0.32" radius="0.06" color="#7b2a83" position="0 0.16 0"></a-cylinder>
+      <a-cylinder class="coralBranch" height="0.28" radius="0.042" color="#a84db6" position="-0.15 0.27 0.03" rotation="0 0 25"></a-cylinder>
+      <a-cylinder class="coralBranch" height="0.28" radius="0.042" color="#6c4fe0" position="0.16 0.27 -0.02" rotation="0 0 -22"></a-cylinder>
+      <a-cylinder class="coralBranch" height="0.24" radius="0.035" color="#ff6fc4" position="-0.04 0.38 0.08" rotation="0 0 18"></a-cylinder>
+      <a-cylinder class="coralBranch" height="0.24" radius="0.035" color="#65ffe7" position="0.06 0.39 -0.06" rotation="0 0 -18"></a-cylinder>
 
-      <a-sphere class="coralGlow" radius="0.055" position="-0.12 0.27 0.02"
-                material="color: #ff7ad6; emissive: #ff7ad6; emissiveIntensity: 0.45; opacity: 0.92"></a-sphere>
-      <a-sphere class="coralGlow" radius="0.05" position="0.13 0.26 -0.02"
-                material="color: #7afff0; emissive: #7afff0; emissiveIntensity: 0.45; opacity: 0.92"></a-sphere>
-      <a-sphere class="coralGlow" radius="0.045" position="0.0 0.31 0.03"
-                material="color: #ff7ad6; emissive: #ff7ad6; emissiveIntensity: 0.42; opacity: 0.92"></a-sphere>
+      <a-sphere class="coralGlow" radius="0.085" position="-0.18 0.42 0.04"
+                material="color: #ff7ad6; emissive: #ff7ad6; emissiveIntensity: 0.55; opacity: 0.96"></a-sphere>
+      <a-sphere class="coralGlow" radius="0.08" position="0.19 0.40 -0.03"
+                material="color: #7afff0; emissive: #7afff0; emissiveIntensity: 0.55; opacity: 0.96"></a-sphere>
+      <a-sphere class="coralGlow" radius="0.07" position="0.0 0.49 0.05"
+                material="color: #ff7ad6; emissive: #ff7ad6; emissiveIntensity: 0.52; opacity: 0.96"></a-sphere>
     </a-entity>
 
     <!-- Trace controller and visuals -->
     <a-entity id="traceController" curve-trace-controller></a-entity>
 
-    <a-sphere id="traceCenter" visible="false" radius="0.07"
-              material="color: #66ccff; emissive: #66ccff; emissiveIntensity: 0.9; opacity: 0.96"></a-sphere>
+    <a-sphere id="traceCenter" visible="false" radius="0.11"
+              material="color: #66ccff; emissive: #66ccff; emissiveIntensity: 1.0; opacity: 0.96"></a-sphere>
 
-    <a-sphere id="traceStart" visible="false" radius="0.07"
-              material="color: #ffd27a; emissive: #ffd27a; emissiveIntensity: 0.9; opacity: 0.96"></a-sphere>
+    <a-sphere id="traceStart" visible="false" radius="0.11"
+              material="color: #ffd27a; emissive: #ffd27a; emissiveIntensity: 1.0; opacity: 0.96"></a-sphere>
 
-    <a-sphere id="traceBall" visible="false" radius="0.065"
+    <a-sphere id="traceBall" visible="false" radius="0.095"
               material="color: #fff8d6; emissive: #fff8d6; emissiveIntensity: 0.95; opacity: 0.98"></a-sphere>
 
     <a-entity id="traceHud" visible="false"
-              position="0 1.95 -1.45"
+              position="0 2.0 -1.55"
               text="value: ; align: center; width: 2.1; color: #FFFFFF"></a-entity>
+
+    <a-entity id="holdTimerText" visible="false"
+              text="value: ; align: center; width: 1.2; color: #FFFFFF"></a-entity>
 
   </a-scene>
 </body>
