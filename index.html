@@ -159,7 +159,7 @@
     let trainingActive = false;
     let trainingEndsAt = 0;
 
-    const STORAGE_KEY = 'trainer_rom_v7';
+    const STORAGE_KEY = 'trainer_rom_v8';
     const CAL = { idle:'idle', yaw:'yaw', pitch:'pitch', roll:'roll', done:'done' };
     let calPhase = CAL.idle;
     let extremes = null;
@@ -372,7 +372,6 @@
         const s = this.baseScale + 0.08 * this.stage;
         this.el.object3D.scale.setScalar(s);
 
-        // brighten coral lights gradually
         const glows = this.el.querySelectorAll('.coralGlow');
         glows.forEach((g, idx) => {
           const base = 0.45 + 0.05 * this.stage + idx * 0.03;
@@ -591,7 +590,6 @@
         this.endHoldTime = 0;
         this.accuracySamples = [];
         this.ballProgress = 0;
-        this.ballIdx = 0;
         this.finishReached = false;
         this.sessionScores = [];
         this.currentTrialMeta = null;
@@ -609,7 +607,6 @@
         this.endHoldTime = 0;
         this.accuracySamples = [];
         this.ballProgress = 0;
-        this.ballIdx = 0;
         this.finishReached = false;
         this.sessionScores = [];
         this.currentTrialMeta = null;
@@ -713,6 +710,21 @@
         this.cameraEl.object3D.getWorldPosition(this.worldHead);
         world.add(this.worldHead);
         return world;
+      },
+
+      _gazeAngleToLocalTarget: function(localTarget) {
+        const targetWorld = this._localToWorld(localTarget);
+        const headWorld = new THREE.Vector3();
+        this.cameraEl.object3D.getWorldPosition(headWorld);
+
+        const gazeDir = new THREE.Vector3(0, 0, -1)
+          .applyQuaternion(this.cameraEl.object3D.quaternion)
+          .normalize();
+
+        const toTarget = targetWorld.clone().sub(headWorld).normalize();
+
+        const dot = clamp(gazeDir.dot(toTarget), -1, 1);
+        return rad2deg(Math.acos(dot));
       },
 
       _getViewPointOnPlane: function() {
@@ -850,7 +862,6 @@
         this.endHoldTime = 0;
         this.accuracySamples = [];
         this.ballProgress = 0;
-        this.ballIdx = 0;
         this.finishReached = false;
         this.failFlashTimer = 0;
 
@@ -882,18 +893,18 @@
         this.state = 'acquireStart';
       },
 
-      _distanceLocal2D: function(a, b) {
-        const dx = a.x - b.x;
-        const dy = a.y - b.y;
-        return Math.sqrt(dx*dx + dy*dy);
-      },
-
       _curvePointAtProgress: function(progress) {
         const idxFloat = clamp(progress, 0, 1) * (this.curveLocal.length - 1);
         const idx0 = Math.floor(idxFloat);
         const idx1 = Math.min(this.curveLocal.length - 1, idx0 + 1);
         const t = idxFloat - idx0;
         return this.curveLocal[idx0].clone().lerp(this.curveLocal[idx1], t);
+      },
+
+      _distanceLocal2D: function(a, b) {
+        const dx = a.x - b.x;
+        const dy = a.y - b.y;
+        return Math.sqrt(dx*dx + dy*dy);
       },
 
       _computeTrialScore: function() {
@@ -916,11 +927,11 @@
         const p = this._getViewPointOnPlane();
         if (!p) return;
 
-        const startTol = 0.11;
-        const finishTol = 0.11;
         const ballTol = 0.12;
-        const forwardRate = 0.17;   // progress per second when within tolerance
-        const rollbackRate = 0.08;  // soft fail rollback per second
+        const forwardRate = 0.17;
+        const rollbackRate = 0.08;
+        const startAngleTolDeg = 5.0;
+        const finishAngleTolDeg = 5.0;
 
         if (this.failFlashTimer > 0) {
           this.failFlashTimer -= dt;
@@ -928,8 +939,8 @@
         }
 
         if (this.state === 'acquireStart') {
-          const d = this._distanceLocal2D(p, this.startLocal);
-          if (d <= startTol) {
+          const ang = this._gazeAngleToLocalTarget(this.startLocal);
+          if (ang <= startAngleTolDeg) {
             this.startHoldTime = 0;
             this.state = 'holdStart';
           }
@@ -937,8 +948,8 @@
         }
 
         if (this.state === 'holdStart') {
-          const d = this._distanceLocal2D(p, this.startLocal);
-          if (d > startTol) {
+          const ang = this._gazeAngleToLocalTarget(this.startLocal);
+          if (ang > startAngleTolDeg) {
             this.startHoldTime = 0;
             this.state = 'acquireStart';
             this._showHud(`Trial ${this.trialIndex + 1}/10\nCharge the pearl at the start\nHold 5.0 s`);
@@ -990,8 +1001,8 @@
         }
 
         if (this.state === 'holdFinish') {
-          const dToCenter = this._distanceLocal2D(p, this.centerLocal);
-          if (dToCenter > finishTol) {
+          const ang = this._gazeAngleToLocalTarget(this.centerLocal);
+          if (ang > finishAngleTolDeg) {
             this.endHoldTime = 0;
             this.state = 'traceActive';
             this._showHud(`Trial ${this.trialIndex + 1}/10\nGuide the pearl to the coral`);
