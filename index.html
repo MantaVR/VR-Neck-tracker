@@ -90,7 +90,7 @@
       </div>
 
       <div class="row" style="grid-column: 1 / -1;">
-        <label for="trainPct"><b>Training % of measured ROM</b></label>
+        <label for="trainPct"><b>Training % of measured ROM</b> (pursuit only)</label>
         <input id="trainPct" type="range" min="50" max="100" step="1" value="80" />
         <output id="trainPctOut">80%</output>
       </div>
@@ -131,7 +131,6 @@
   </div>
 
   <script>
-    /********** Utility **********/
     const rad2deg = r => r * 180 / Math.PI;
     const deg2rad = d => d * Math.PI / 180;
     const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
@@ -148,7 +147,6 @@
       return { yaw: rad2deg(e.y), pitch: rad2deg(e.x), roll: rad2deg(e.z) };
     }
 
-    /********** Global state **********/
     window.trainingActive = false;
     window.trainingMode = 'pursuit';
     window.qNeutral = null;
@@ -161,12 +159,11 @@
     let trainingActive = false;
     let trainingEndsAt = 0;
 
-    const STORAGE_KEY = 'trainer_rom_v5';
+    const STORAGE_KEY = 'trainer_rom_v6';
     const CAL = { idle:'idle', yaw:'yaw', pitch:'pitch', roll:'roll', done:'done' };
     let calPhase = CAL.idle;
     let extremes = null;
 
-    /********** UI wiring **********/
     const trainPct = $('trainPct');
     const trainPctOut = $('trainPctOut');
     const liveYaw = $('liveYaw'), livePitch = $('livePitch'), liveRoll = $('liveRoll');
@@ -326,7 +323,6 @@
       updateResultsUI();
     }
 
-    /********** Starfield **********/
     AFRAME.registerComponent('starfield', {
       schema: { count: {type:'int', default:1000}, radius:{type:'number', default:70}, size:{type:'number', default:0.06} },
       init: function () {
@@ -349,7 +345,6 @@
       }
     });
 
-    /********** Pursuit component **********/
     AFRAME.registerComponent('pursuit3axis', {
       schema: {
         mode: { type: 'string', default: 'cycle' },
@@ -534,10 +529,10 @@
       }
     });
 
-    /********** Curve tracing mode **********/
     AFRAME.registerComponent('curve-trace-controller', {
       init: function () {
         this.cameraEl = document.querySelector('a-camera');
+        this.sceneElRef = this.el.sceneEl;
         this.hudEl = document.querySelector('#traceHud');
         this.centerEl = document.querySelector('#traceCenter');
         this.startEl = document.querySelector('#traceStart');
@@ -545,33 +540,63 @@
         this.curveLine = null;
         this.corridorPoints = [];
         this.curveLocal = [];
-        this.centerLocal = new THREE.Vector3(0, 0, -1.6);
+        this.centerLocal = new THREE.Vector3(0, 0, -2.4);
 
         this.state = 'idle';
         this.trials = [];
         this.trialIndex = -1;
         this.holdTime = 0;
+        this.endHoldTime = 0;
         this.scoreSamples = [];
         this.progressIdx = 0;
         this.finishReached = false;
         this.sessionScores = [];
         this.currentTrialMeta = null;
+        this.waitingForExitPress = false;
 
-        this.tmpVec = new THREE.Vector3();
         this.worldHead = new THREE.Vector3();
+        this._onSelect = this._onSelect.bind(this);
+      },
+
+      remove: function() {
+        this.sceneElRef.removeEventListener('enter-vr', this._setupXRListeners);
       },
 
       resetSession: function() {
         this.state = 'idle';
         this.trialIndex = -1;
         this.holdTime = 0;
+        this.endHoldTime = 0;
         this.scoreSamples = [];
         this.progressIdx = 0;
         this.finishReached = false;
         this.sessionScores = [];
         this.currentTrialMeta = null;
+        this.waitingForExitPress = false;
         this._clearCurveVisuals();
         this._hideAll();
+        this._detachControllerListeners();
+      },
+
+      _attachControllerListeners: function() {
+        if (!this.sceneElRef) return;
+        this.sceneElRef.addEventListener('triggerdown', this._onSelect);
+        this.sceneElRef.addEventListener('abuttondown', this._onSelect);
+        this.sceneElRef.addEventListener('xbuttondown', this._onSelect);
+      },
+
+      _detachControllerListeners: function() {
+        if (!this.sceneElRef) return;
+        this.sceneElRef.removeEventListener('triggerdown', this._onSelect);
+        this.sceneElRef.removeEventListener('abuttondown', this._onSelect);
+        this.sceneElRef.removeEventListener('xbuttondown', this._onSelect);
+      },
+
+      _onSelect: function() {
+        if (this.waitingForExitPress) {
+          this.waitingForExitPress = false;
+          endTraining('modeComplete');
+        }
       },
 
       startSession: function() {
@@ -579,14 +604,13 @@
         const rom = window.baselineROM;
         if (!rom || !window.qNeutral) return;
 
-        const pct = parseFloat(trainPct.value) / 100;
-        this.centerDistance = 1.6;
+        this.centerDistance = 2.4;
+        this.centerLocal.set(0, 0, -this.centerDistance);
 
-        const yawHalf = (rom.yawROM / 2) * pct;
-        const pitchHalf = (rom.pitchROM / 2) * pct;
+        const yawHalf = (rom.yawROM / 2) * 0.95;
+        const pitchHalf = (rom.pitchROM / 2) * 0.95;
 
         this.trials = this._generateBalancedTrials(yawHalf, pitchHalf);
-        this.centerLocal.set(0, 0, -this.centerDistance);
         this._showHud('Curve tracing\nPreparing...');
         this._nextTrial();
       },
@@ -595,38 +619,45 @@
         const avg = this.sessionScores.length ? (this.sessionScores.reduce((a,b)=>a+b,0)/this.sessionScores.length) : 0;
         const best = this.sessionScores.length ? Math.max(...this.sessionScores) : 0;
         const worst = this.sessionScores.length ? Math.min(...this.sessionScores) : 0;
-        this._showHud(`Session complete\nAvg ${avg.toFixed(1)}%  Best ${best.toFixed(1)}%  Worst ${worst.toFixed(1)}%`);
-        calStatus.textContent = `Curve tracing complete. Avg ${avg.toFixed(1)}%, best ${best.toFixed(1)}%, worst ${worst.toFixed(1)}%. Returned to main menu.`;
 
-        setTimeout(() => {
-          endTraining('modeComplete');
-        }, 2200);
+        this.waitingForExitPress = true;
+        this._attachControllerListeners();
+        this._showHud(
+          `Session complete\nAvg ${avg.toFixed(1)}%  Best ${best.toFixed(1)}%  Worst ${worst.toFixed(1)}%\n\nPress trigger to return`
+        );
+        calStatus.textContent = `Curve tracing complete. Avg ${avg.toFixed(1)}%, best ${best.toFixed(1)}%, worst ${worst.toFixed(1)}%. Press trigger to return.`;
       },
 
       _generateBalancedTrials: function(yawHalf, pitchHalf) {
-        const yawMagSmall = clamp(yawHalf * 0.45, 8, 30);
-        const yawMagBig   = clamp(yawHalf * 0.75, 12, 45);
-        const pitchMagSmall = clamp(pitchHalf * 0.40, 6, 20);
-        const pitchMagBig   = clamp(pitchHalf * 0.70, 10, 30);
+        const minYaw = 20;
+        const minPitch = 20;
+
+        const yawLarge = clamp(yawHalf * 0.80, minYaw, yawHalf);
+        const yawSmall = clamp(Math.max(minYaw, yawHalf * 0.55), minYaw, yawHalf);
+        const pitchLarge = clamp(pitchHalf * 0.80, minPitch, pitchHalf);
+        const pitchSmall = clamp(Math.max(minPitch, pitchHalf * 0.55), minPitch, pitchHalf);
 
         const defs = [
-          {x:-yawMagBig,  y:+pitchMagBig,   zone:'leftAbove'},
-          {x:-yawMagSmall,y:+pitchMagSmall, zone:'leftAbove'},
-          {x:-yawMagBig,  y:-pitchMagBig,   zone:'leftBelow'},
-          {x:-yawMagSmall,y:-pitchMagSmall, zone:'leftBelow'},
-          {x:0,           y:+pitchMagBig,   zone:'centerAbove'},
-          {x:0,           y:-pitchMagBig,   zone:'centerBelow'},
-          {x:+yawMagBig,  y:+pitchMagBig,   zone:'rightAbove'},
-          {x:+yawMagSmall,y:+pitchMagSmall, zone:'rightAbove'},
-          {x:+yawMagBig,  y:-pitchMagBig,   zone:'rightBelow'},
-          {x:+yawMagSmall,y:-pitchMagSmall, zone:'rightBelow'}
+          {x:-yawLarge, y:+pitchLarge, zone:'leftAbove'},
+          {x:-yawSmall, y:+pitchSmall, zone:'leftAbove'},
+          {x:-yawLarge, y:-pitchLarge, zone:'leftBelow'},
+          {x:-yawSmall, y:-pitchSmall, zone:'leftBelow'},
+          {x:+yawLarge, y:+pitchLarge, zone:'rightAbove'},
+          {x:+yawSmall, y:+pitchSmall, zone:'rightAbove'},
+          {x:+yawLarge, y:-pitchLarge, zone:'rightBelow'},
+          {x:+yawSmall, y:-pitchSmall, zone:'rightBelow'},
+          {x:-yawLarge, y:+pitchSmall, zone:'leftAbove'},
+          {x:+yawLarge, y:-pitchSmall, zone:'rightBelow'}
         ];
 
-        // small jitter for variety while preserving coverage
         return defs.map(d => {
-          const yawDeg = d.x + (Math.random()*2 - 1) * 2.0;
-          const pitchDeg = d.y + (Math.random()*2 - 1) * 1.5;
-          return { yawDeg, pitchDeg, zone:d.zone };
+          let yawJ = d.x + (Math.random()*2 - 1) * 1.5;
+          let pitchJ = d.y + (Math.random()*2 - 1) * 1.5;
+
+          if (Math.abs(yawJ) < minYaw) yawJ = Math.sign(yawJ || d.x || 1) * minYaw;
+          if (Math.abs(pitchJ) < minPitch) pitchJ = Math.sign(pitchJ || d.y || 1) * minPitch;
+
+          return { yawDeg: yawJ, pitchDeg: pitchJ, zone: d.zone };
         });
       },
 
@@ -646,14 +677,9 @@
 
       _getViewPointOnPlane: function() {
         if (!window.qNeutral || !this.cameraEl) return null;
-
-        // get forward direction in world
         const fwdWorld = new THREE.Vector3(0, 0, -1).applyQuaternion(this.cameraEl.object3D.quaternion).normalize();
-
-        // convert to neutral-local
         const fwdLocal = fwdWorld.clone().applyQuaternion(window.qNeutral.clone().invert());
 
-        // intersect ray from local origin with plane z = -centerDistance
         if (Math.abs(fwdLocal.z) < 1e-4 || fwdLocal.z >= -1e-4) return null;
         const t = (-this.centerDistance) / fwdLocal.z;
         if (t <= 0) return null;
@@ -669,8 +695,6 @@
         const x1 = centerLocal.x;
         const z1 = centerLocal.z;
 
-        // parabola-like bias with curvature strongest near start:
-        // x(t) linear, y(t) = y0 * (1-t)^2
         for (let i = 0; i < n; i++) {
           const t = i / (n - 1);
           const x = x0 + (x1 - x0) * t;
@@ -701,7 +725,7 @@
         const every = 3;
         for (let i = 0; i < curveLocal.length; i += every) {
           const sphere = document.createElement('a-sphere');
-          sphere.setAttribute('radius', '0.055');
+          sphere.setAttribute('radius', '0.07');
           sphere.setAttribute('segments-width', '10');
           sphere.setAttribute('segments-height', '8');
           sphere.setAttribute('material', `color: ${corridorColor}; opacity: 0.18; transparent: true; emissive: ${corridorColor}; emissiveIntensity: 0.25`);
@@ -728,9 +752,9 @@
         this.hudEl.setAttribute('text', {
           value: text,
           align: 'center',
-          width: 1.9,
+          width: 2.0,
           color: '#FFFFFF',
-          wrapCount: 26
+          wrapCount: 28
         });
       },
 
@@ -750,6 +774,7 @@
 
         this.currentTrialMeta = this.trials[this.trialIndex];
         this.holdTime = 0;
+        this.endHoldTime = 0;
         this.scoreSamples = [];
         this.progressIdx = 0;
         this.finishReached = false;
@@ -763,10 +788,12 @@
 
         this.centerEl.setAttribute('position', `${centerWorld.x} ${centerWorld.y} ${centerWorld.z}`);
         this.centerEl.setAttribute('visible', 'true');
+        this.centerEl.setAttribute('radius', '0.06');
         this.centerEl.setAttribute('material', 'color: #66ccff; emissive: #66ccff; emissiveIntensity: 0.8; opacity: 0.95');
 
         this.startEl.setAttribute('position', `${startWorld.x} ${startWorld.y} ${startWorld.z}`);
         this.startEl.setAttribute('visible', 'true');
+        this.startEl.setAttribute('radius', '0.065');
         this.startEl.setAttribute('material', 'color: #ffcc66; emissive: #ffcc66; emissiveIntensity: 0.8; opacity: 0.95');
 
         this._drawCurveAndCorridor(this.curveLocal, false);
@@ -794,7 +821,6 @@
       },
 
       _computeTrialScore: function() {
-        const corridorWidth = 0.10;
         const meanAcc = this.scoreSamples.length
           ? this.scoreSamples.reduce((a,b)=>a+b,0) / this.scoreSamples.length
           : 0;
@@ -808,14 +834,15 @@
       tick: function(time, timeDelta) {
         if (!window.trainingActive || window.trainingMode !== 'curveTrace') return;
         if (!this.cameraEl || !window.qNeutral || !window.baselineROM) return;
+        if (this.waitingForExitPress) return;
 
         const dt = Math.min(timeDelta / 1000, 0.05);
         const p = this._getViewPointOnPlane();
         if (!p) return;
 
-        const startTol = 0.08;
-        const finishTol = 0.09;
-        const corridorWidth = 0.10;
+        const startTol = 0.10;
+        const finishTol = 0.11;
+        const corridorWidth = 0.12;
 
         if (this.state === 'acquireStart') {
           const d = this._distanceLocal2D(p, this.startLocal);
@@ -843,6 +870,7 @@
             this.state = 'traceActive';
             this.progressIdx = 0;
             this.scoreSamples = [];
+            this.endHoldTime = 0;
             this._drawCurveAndCorridor(this.curveLocal, true);
             this._showHud(`Trial ${this.trialIndex + 1}/10\nTrace the corridor to centre`);
           }
@@ -850,7 +878,6 @@
         }
 
         if (this.state === 'traceActive') {
-          // monotonic progress
           const nearest = this._nearestCurveIndex(p, Math.max(0, this.progressIdx - 2));
           this.progressIdx = Math.max(this.progressIdx, nearest.idx);
 
@@ -858,37 +885,65 @@
           this.scoreSamples.push(acc);
 
           const dToCenter = this._distanceLocal2D(p, this.centerLocal);
-          if (this.progressIdx >= this.curveLocal.length - 4 && dToCenter <= finishTol) {
+          const nearEnd = this.progressIdx >= this.curveLocal.length - 4;
+
+          if (nearEnd && dToCenter <= finishTol) {
+            this.state = 'holdFinish';
+            this.endHoldTime = 0;
+            this._showHud(`Trial ${this.trialIndex + 1}/10\nHold finish: 5.0 s`);
+          }
+          return;
+        }
+
+        if (this.state === 'holdFinish') {
+          const nearest = this._nearestCurveIndex(p, Math.max(0, this.progressIdx - 2));
+          this.progressIdx = Math.max(this.progressIdx, nearest.idx);
+
+          const acc = clamp(1 - (nearest.dist / corridorWidth), 0, 1);
+          this.scoreSamples.push(acc);
+
+          const dToCenter = this._distanceLocal2D(p, this.centerLocal);
+          const nearEnd = this.progressIdx >= this.curveLocal.length - 4;
+
+          if (!(nearEnd && dToCenter <= finishTol)) {
+            this.endHoldTime = 0;
+            this.state = 'traceActive';
+            this._showHud(`Trial ${this.trialIndex + 1}/10\nTrace the corridor to centre`);
+            return;
+          }
+
+          this.endHoldTime += dt;
+          const remain = Math.max(0, 5.0 - this.endHoldTime);
+          this._showHud(`Trial ${this.trialIndex + 1}/10\nHold finish: ${remain.toFixed(1)} s`);
+
+          if (this.endHoldTime >= 5.0) {
             this.finishReached = true;
             const score = this._computeTrialScore();
             this.sessionScores.push(score);
             this.state = 'trialComplete';
             this._showHud(`Trial ${this.trialIndex + 1}/10\nScore: ${score.toFixed(1)}%`);
             setTimeout(() => {
-              if (window.trainingActive && window.trainingMode === 'curveTrace') {
+              if (window.trainingActive && window.trainingMode === 'curveTrace' && !this.waitingForExitPress) {
                 this._nextTrial();
               }
-            }, 1500);
+            }, 1700);
           }
-          return;
         }
       }
     });
 
-    /********** Training start/end **********/
     function applyPursuitSettingsFromBaseline() {
       if (!baseline) return;
       const pct = parseFloat(trainPct.value) / 100;
       const yawRangeDeg = (baseline.yawROM / 2) * pct;
       const pitchRangeDeg = (baseline.pitchROM / 2) * pct;
       const rollRangeDeg = (baseline.rollROM / 2) * pct;
-      const mode = 'cycle';
       const speed = parseFloat($('speed').value);
       const jumpAmp = parseFloat($('jumpAmp').value);
 
       const star = document.querySelector('#star');
       const attrs = [
-        `mode: ${mode}`,
+        `mode: cycle`,
         `cycleOrder: drift,circle,figure8,jumps`,
         `cycleMinSec: 35`,
         `cycleMaxSec: 55`,
@@ -974,10 +1029,11 @@
         calStatus.textContent = 'Pursuit finished. Returned to main menu. Set Neutral again, then run Post-training Re-test.';
       } else if (reason !== 'modeComplete') {
         calStatus.textContent = 'Training ended. Returned to main menu. Set Neutral again, then run Post-training Re-test.';
+      } else {
+        calStatus.textContent = 'Returned to main menu. Set Neutral again, then run Post-training Re-test.';
       }
     }
 
-    /********** Main loop **********/
     function rafLoop() {
       const camObj = getCameraObj();
       if (camObj && neutralCaptured) {
@@ -1041,7 +1097,6 @@
       </a-camera>
     </a-entity>
 
-    <!-- pursuit target -->
     <a-entity id="star"
       pursuit3axis="mode: cycle; yawRangeDeg: 25; pitchRangeDeg: 15; rollRangeDeg: 10; distMin: 1.2; distMax: 2.2; speed: 0.20; jumpAmplitude: 0.7; arcBulge: 0.35;">
       <a-sphere radius="0.03"
@@ -1051,18 +1106,17 @@
                 animation="property: rotation; to: 0 360 0; loop: true; dur: 1800; easing: linear"></a-entity>
     </a-entity>
 
-    <!-- tracing mode visuals -->
     <a-entity id="traceController" curve-trace-controller></a-entity>
 
-    <a-sphere id="traceCenter" visible="false" radius="0.045"
+    <a-sphere id="traceCenter" visible="false" radius="0.06"
               material="color: #66ccff; emissive: #66ccff; emissiveIntensity: 0.8; opacity: 0.95"></a-sphere>
 
-    <a-sphere id="traceStart" visible="false" radius="0.05"
+    <a-sphere id="traceStart" visible="false" radius="0.065"
               material="color: #ffcc66; emissive: #ffcc66; emissiveIntensity: 0.8; opacity: 0.95"></a-sphere>
 
     <a-entity id="traceHud" visible="false"
-              position="0 1.85 -1.25"
-              text="value: ; align: center; width: 1.9; color: #FFFFFF"></a-entity>
+              position="0 1.85 -1.35"
+              text="value: ; align: center; width: 2.0; color: #FFFFFF"></a-entity>
 
   </a-scene>
 </body>
