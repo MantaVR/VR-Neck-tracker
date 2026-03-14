@@ -159,7 +159,7 @@
     let trainingActive = false;
     let trainingEndsAt = 0;
 
-    const STORAGE_KEY = 'trainer_rom_v10';
+    const STORAGE_KEY = 'trainer_rom_v12';
     const CAL = { idle:'idle', yaw:'yaw', pitch:'pitch', roll:'roll', done:'done' };
     let calPhase = CAL.idle;
     let extremes = null;
@@ -323,8 +323,6 @@
       updateResultsUI();
     }
 
-    /* ---------------- Underwater environment ---------------- */
-
     AFRAME.registerComponent('underwater-particles', {
       schema: {
         count: { type:'int', default: 1600 },
@@ -354,37 +352,97 @@
       }
     });
 
-    /* ---------------- Coral growth ---------------- */
-
     AFRAME.registerComponent('coral-growth', {
       init: function() {
         this.stage = 0;
+        this.baseScales = [];
+        this.branchEls = Array.from(this.el.querySelectorAll('.coralBranch'));
+        this.glowEls = Array.from(this.el.querySelectorAll('.coralGlow'));
+
         this.el.object3D.scale.set(1.0, 1.0, 1.0);
+
+        this.branchEls.forEach(branch => {
+          this.baseScales.push(branch.object3D.scale.clone());
+        });
       },
       resetGrowth: function() {
         this.stage = 0;
         this.el.object3D.scale.set(1.0, 1.0, 1.0);
-        const glows = this.el.querySelectorAll('.coralGlow');
-        glows.forEach((g, idx) => {
+
+        this.branchEls.forEach((branch, i) => {
+          const s = this.baseScales[i] || new THREE.Vector3(1,1,1);
+          branch.object3D.scale.copy(s);
+        });
+
+        this.glowEls.forEach((g, idx) => {
+          g.object3D.scale.set(1,1,1);
           g.setAttribute('material',
             `color: ${idx % 2 === 0 ? '#ff7ad6' : '#7afff0'}; emissive: ${idx % 2 === 0 ? '#ff7ad6' : '#7afff0'}; emissiveIntensity: 0.55; opacity: 0.96`);
         });
       },
       grow: function() {
         this.stage = Math.min(10, this.stage + 1);
-        const s = 1.0 + 0.18 * this.stage;
-        this.el.object3D.scale.set(s * 0.95, s * 1.10, s * 0.95);
 
-        const glows = this.el.querySelectorAll('.coralGlow');
-        glows.forEach((g, idx) => {
-          const base = 0.55 + 0.10 * this.stage + idx * 0.04;
+        const s = 1.0 + 0.24 * this.stage;
+        this.el.object3D.scale.set(s * 0.96, s * 1.18, s * 0.96);
+
+        this.branchEls.forEach((branch, i) => {
+          const base = this.baseScales[i] || new THREE.Vector3(1,1,1);
+          const multY = 1 + 0.10 * this.stage;
+          const multXZ = 1 + 0.04 * this.stage;
+          branch.object3D.scale.set(base.x * multXZ, base.y * multY, base.z * multXZ);
+        });
+
+        this.glowEls.forEach((g, idx) => {
+          const glowScale = 1 + 0.08 * this.stage + idx * 0.02;
+          g.object3D.scale.set(glowScale, glowScale, glowScale);
+          const base = 0.55 + 0.14 * this.stage + idx * 0.05;
           g.setAttribute('material',
             `color: ${idx % 2 === 0 ? '#ff7ad6' : '#7afff0'}; emissive: ${idx % 2 === 0 ? '#ff7ad6' : '#7afff0'}; emissiveIntensity: ${base}; opacity: 0.96`);
         });
       }
     });
 
-    /* ---------------- Pursuit mode ---------------- */
+    AFRAME.registerComponent('hud-follow', {
+      schema: {
+        distance: { type: 'number', default: 1.55 },
+        height: { type: 'number', default: 0.28 },
+        smoothing: { type: 'number', default: 0.12 }
+      },
+      init: function () {
+        this.cameraEl = document.querySelector('a-camera');
+        this.targetPos = new THREE.Vector3();
+        this.currentPos = new THREE.Vector3();
+        this.tempDir = new THREE.Vector3();
+        this.started = false;
+      },
+      tick: function () {
+        if (!this.cameraEl) return;
+
+        const camObj = this.cameraEl.object3D;
+        const camWorld = new THREE.Vector3();
+        camObj.getWorldPosition(camWorld);
+
+        this.tempDir.set(0, 0, -1).applyQuaternion(camObj.quaternion).normalize();
+        this.tempDir.y = 0;
+        if (this.tempDir.lengthSq() < 1e-6) this.tempDir.set(0,0,-1);
+        this.tempDir.normalize();
+
+        this.targetPos.copy(camWorld)
+          .add(this.tempDir.multiplyScalar(this.data.distance))
+          .add(new THREE.Vector3(0, this.data.height, 0));
+
+        if (!this.started) {
+          this.currentPos.copy(this.targetPos);
+          this.started = true;
+        } else {
+          this.currentPos.lerp(this.targetPos, this.data.smoothing);
+        }
+
+        this.el.object3D.position.copy(this.currentPos);
+        this.el.object3D.lookAt(camWorld);
+      }
+    });
 
     AFRAME.registerComponent('pursuit3axis', {
       schema: {
@@ -570,8 +628,6 @@
       }
     });
 
-    /* ---------------- Coral tracing mode ---------------- */
-
     AFRAME.registerComponent('curve-trace-controller', {
       init: function () {
         this.cameraEl = document.querySelector('a-camera');
@@ -586,7 +642,7 @@
         this.curveLine = null;
         this.corridorPoints = [];
         this.curveLocal = [];
-        this.centerLocal = new THREE.Vector3(0, 0, -4.0);
+        this.centerLocal = new THREE.Vector3(0, 0, -8.0);
 
         this.state = 'idle';
         this.trials = [];
@@ -603,6 +659,12 @@
 
         this.worldHead = new THREE.Vector3();
         this.sessionOriginWorld = new THREE.Vector3();
+
+        this.startAnchors = [];
+        this.anchorOrder = [];
+        this.anchorIslandEls = [];
+        this.currentAnchorIndex = -1;
+
         this._onSelect = this._onSelect.bind(this);
       },
 
@@ -618,9 +680,16 @@
         this.currentTrialMeta = null;
         this.waitingForExitPress = false;
         this.failFlashTimer = 0;
+        this.currentAnchorIndex = -1;
+        this.startAnchors = [];
+        this.anchorOrder = [];
+
         this._clearCurveVisuals();
+        this._clearAnchorIslands();
         this._hideAll();
         this._detachControllerListeners();
+
+        this.coralEl.setAttribute('position', '0 0 -8');
         const coralComp = this.coralEl.components['coral-growth'];
         if (coralComp) coralComp.resetGrowth();
       },
@@ -649,16 +718,22 @@
         const rom = window.baselineROM;
         if (!rom || !window.qNeutral) return;
 
-        this.centerDistance = 4.0;
+        this.centerDistance = 8.0;
         this.centerLocal.set(0, 0, -this.centerDistance);
 
-        // FIX: freeze origin for the whole tracing session so visible targets and gaze checks match
         this.cameraEl.object3D.getWorldPosition(this.sessionOriginWorld);
+
+        const centerWorld = this._localToWorld(this.centerLocal);
+        this.coralEl.setAttribute('position', `${centerWorld.x} ${centerWorld.y} ${centerWorld.z}`);
 
         const yawHalf = (rom.yawROM / 2) * 0.95;
         const pitchHalf = (rom.pitchROM / 2) * 0.95;
 
-        this.trials = this._generateBalancedTrials(yawHalf, pitchHalf);
+        this.startAnchors = this._generateStartAnchors(yawHalf, pitchHalf);
+        const order = this._makeAnchorOrder(this.startAnchors.length);
+        this.anchorOrder = order.slice(0, 10);
+        this._createAnchorIslands();
+
         this._showHud('Coral tracing\nPreparing...');
         this._nextTrial();
       },
@@ -677,34 +752,92 @@
         calStatus.textContent = `Coral tracing complete. Avg ${avg.toFixed(1)}%, best ${best.toFixed(1)}%, worst ${worst.toFixed(1)}%. Press trigger to return.`;
       },
 
-      _generateBalancedTrials: function(yawHalf, pitchHalf) {
-        const minYaw = 20;
-        const minPitch = 20;
+      _generateStartAnchors: function(yawHalf, pitchHalf) {
+        const minYaw = 18;
+        const minPitch = 18;
 
-        const yawLarge = clamp(yawHalf * 0.82, minYaw, yawHalf);
-        const yawSmall = clamp(Math.max(minYaw, yawHalf * 0.58), minYaw, yawHalf);
-        const pitchLarge = clamp(pitchHalf * 0.82, minPitch, pitchHalf);
-        const pitchSmall = clamp(Math.max(minPitch, pitchHalf * 0.58), minPitch, pitchHalf);
-
-        const defs = [
-          {x:-yawLarge, y:+pitchLarge, zone:'leftAbove'},
-          {x:-yawSmall, y:+pitchSmall, zone:'leftAbove'},
-          {x:-yawLarge, y:-pitchLarge, zone:'leftBelow'},
-          {x:-yawSmall, y:-pitchSmall, zone:'leftBelow'},
-          {x:+yawLarge, y:+pitchLarge, zone:'rightAbove'},
-          {x:+yawSmall, y:+pitchSmall, zone:'rightAbove'},
-          {x:+yawLarge, y:-pitchLarge, zone:'rightBelow'},
-          {x:+yawSmall, y:-pitchSmall, zone:'rightBelow'},
-          {x:-yawLarge, y:+pitchSmall, zone:'leftAbove'},
-          {x:+yawLarge, y:-pitchSmall, zone:'rightBelow'}
+        const yawBands = [
+          clamp(yawHalf * 0.45, minYaw, yawHalf),
+          clamp(yawHalf * 0.62, minYaw, yawHalf),
+          clamp(yawHalf * 0.78, minYaw, yawHalf),
+          clamp(yawHalf * 0.90, minYaw, yawHalf),
+          clamp(yawHalf * 0.98, minYaw, yawHalf)
         ];
 
-        return defs.map(d => {
-          let yawJ = d.x + (Math.random()*2 - 1) * 1.2;
-          let pitchJ = d.y + (Math.random()*2 - 1) * 1.2;
-          if (Math.abs(yawJ) < minYaw) yawJ = Math.sign(yawJ || d.x || 1) * minYaw;
-          if (Math.abs(pitchJ) < minPitch) pitchJ = Math.sign(pitchJ || d.y || 1) * minPitch;
-          return { yawDeg: yawJ, pitchDeg: pitchJ, zone: d.zone };
+        const pitchBands = [
+          clamp(pitchHalf * 0.45, minPitch, pitchHalf),
+          clamp(pitchHalf * 0.62, minPitch, pitchHalf),
+          clamp(pitchHalf * 0.78, minPitch, pitchHalf),
+          clamp(pitchHalf * 0.90, minPitch, pitchHalf),
+          clamp(pitchHalf * 0.98, minPitch, pitchHalf)
+        ];
+
+        const anchors = [];
+
+        const quadrants = [
+          { sx: -1, sy:  1, zone: 'leftAbove' },
+          { sx: -1, sy: -1, zone: 'leftBelow' },
+          { sx:  1, sy:  1, zone: 'rightAbove' },
+          { sx:  1, sy: -1, zone: 'rightBelow' }
+        ];
+
+        quadrants.forEach((q, qi) => {
+          for (let i = 0; i < 5; i++) {
+            const yaw = q.sx * yawBands[i];
+            const pitch = q.sy * pitchBands[(i + qi) % pitchBands.length];
+            anchors.push({
+              yawDeg: yaw,
+              pitchDeg: pitch,
+              zone: q.zone
+            });
+          }
+        });
+
+        return anchors;
+      },
+
+      _makeAnchorOrder: function(count) {
+        const arr = Array.from({ length: count }, (_, i) => i);
+        for (let i = arr.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [arr[i], arr[j]] = [arr[j], arr[i]];
+        }
+        return arr;
+      },
+
+      _createAnchorIslands: function() {
+        this._clearAnchorIslands();
+
+        this.startAnchors.forEach((anchor) => {
+          const local = this._localFromAngles(anchor.yawDeg, anchor.pitchDeg, this.centerDistance);
+          const world = this._localToWorld(local);
+
+          const island = document.createElement('a-cylinder');
+          island.setAttribute('height', '0.012');
+          island.setAttribute('radius', '0.05');
+          island.setAttribute('scale', '1.7 1 1.1');
+          island.setAttribute('position', `${world.x} ${world.y} ${world.z}`);
+          island.setAttribute('rotation', '90 0 0');
+          island.setAttribute('material', 'color: #6f8fb8; emissive: #6f8fb8; emissiveIntensity: 0.18; opacity: 0.92');
+          this.el.sceneEl.appendChild(island);
+
+          this.anchorIslandEls.push(island);
+        });
+      },
+
+      _clearAnchorIslands: function() {
+        this.anchorIslandEls.forEach(el => el.parentNode && el.parentNode.removeChild(el));
+        this.anchorIslandEls = [];
+      },
+
+      _highlightActiveAnchor: function(activeIdx) {
+        this.anchorIslandEls.forEach((el, i) => {
+          const active = i === activeIdx;
+          el.setAttribute('material',
+            active
+              ? 'color: #ffd27a; emissive: #ffd27a; emissiveIntensity: 0.95; opacity: 0.98'
+              : 'color: #6f8fb8; emissive: #6f8fb8; emissiveIntensity: 0.18; opacity: 0.92'
+          );
         });
       },
 
@@ -717,7 +850,6 @@
       _localToWorld: function(localVec) {
         const world = localVec.clone();
         if (window.qNeutral) world.applyQuaternion(window.qNeutral);
-        // FIX: use frozen session origin, not current head position
         world.add(this.sessionOriginWorld);
         return world;
       },
@@ -749,21 +881,45 @@
       },
 
       _buildCurveLocal: function(startLocal, centerLocal) {
-        const n = 90;
+        const n = 120;
         const curve = [];
+
         const x0 = startLocal.x;
         const y0 = startLocal.y;
         const z0 = startLocal.z;
+
         const x1 = centerLocal.x;
+        const y1 = centerLocal.y;
         const z1 = centerLocal.z;
+
+        const dx = x1 - x0;
+        const dz = z1 - z0;
+
+        const verticalDiff = y0 - y1;
+        const absDiff = Math.abs(verticalDiff);
+
+        const sTurn = 1 / 3;
+
+        const xTurn = x0 + dx * sTurn;
+        const zTurn = z0 + dz * sTurn;
+
+        const yTurn =
+          absDiff < 1e-5
+            ? y1
+            : y1 + Math.sign(verticalDiff) * (4 / 3) * absDiff;
+
+        const p0 = new THREE.Vector3(x0, y0, z0);
+        const p1 = new THREE.Vector3(xTurn, yTurn, zTurn);
+        const p2 = new THREE.Vector3(x1, y1, z1);
 
         for (let i = 0; i < n; i++) {
           const t = i / (n - 1);
-          const x = x0 + (x1 - x0) * t;
-          const y = y0 * Math.pow(1 - t, 2);
-          const z = z0 + (z1 - z0) * t;
-          curve.push(new THREE.Vector3(x, y, z));
+          const a = p0.clone().multiplyScalar((1 - t) * (1 - t));
+          const b = p1.clone().multiplyScalar(2 * (1 - t) * t);
+          const c = p2.clone().multiplyScalar(t * t);
+          curve.push(a.add(b).add(c));
         }
+
         return curve;
       },
 
@@ -785,13 +941,13 @@
 
         for (let i = 0; i < curveLocal.length; i += 2) {
           const sphere = document.createElement('a-sphere');
-          sphere.setAttribute('radius', '0.11');
+          sphere.setAttribute('radius', '0.13');
           sphere.setAttribute('segments-width', '10');
           sphere.setAttribute('segments-height', '8');
           sphere.setAttribute('class', 'corridorDot');
           const wp = this._localToWorld(curveLocal[i]);
           sphere.setAttribute('position', `${wp.x} ${wp.y} ${wp.z}`);
-          sphere.setAttribute('material', `color: ${active ? '#45ffd7' : '#88bbff'}; opacity: 0.06; transparent: true; emissive: ${active ? '#45ffd7' : '#88bbff'}; emissiveIntensity: 0.16`);
+          sphere.setAttribute('material', `color: ${active ? '#45ffd7' : '#88bbff'}; opacity: 0.07; transparent: true; emissive: ${active ? '#45ffd7' : '#88bbff'}; emissiveIntensity: 0.18`);
           this.el.sceneEl.appendChild(sphere);
           this.corridorPoints.push(sphere);
         }
@@ -804,9 +960,9 @@
         const litIndex = Math.floor((this.ballProgress || 0) * total);
         this.corridorPoints.forEach((el, i) => {
           const ahead = i >= litIndex;
-          const nearBall = Math.abs(i - litIndex) < 4;
-          const opacity = ahead ? (nearBall ? 0.28 : 0.18) : 0.04;
-          const emissiveIntensity = ahead ? (nearBall ? 0.65 : 0.28) : 0.08;
+          const nearBall = Math.abs(i - litIndex) < 5;
+          const opacity = ahead ? (nearBall ? 0.30 : 0.19) : 0.04;
+          const emissiveIntensity = ahead ? (nearBall ? 0.72 : 0.30) : 0.08;
           el.setAttribute('material',
             `color: #45ffd7; opacity: ${opacity}; transparent: true; emissive: #45ffd7; emissiveIntensity: ${emissiveIntensity}`);
         });
@@ -845,11 +1001,12 @@
       _showHoldTimerAtLocal: function(localTarget, secondsRemaining, label) {
         const world = this._localToWorld(localTarget);
         this.holdTimerEl.setAttribute('visible', 'true');
-        this.holdTimerEl.setAttribute('position', `${world.x} ${world.y + 0.18} ${world.z}`);
+        this.holdTimerEl.setAttribute('position', `${world.x} ${world.y + 0.16} ${world.z}`);
+        this.holdTimerEl.object3D.lookAt(this.cameraEl.object3D.getWorldPosition(new THREE.Vector3()));
         this.holdTimerEl.setAttribute('text', {
           value: `${label}\n${secondsRemaining.toFixed(1)} s`,
           align: 'center',
-          width: 1.2,
+          width: 1.25,
           color: '#FFFFFF',
           wrapCount: 14
         });
@@ -879,13 +1036,17 @@
 
       _nextTrial: function() {
         this.trialIndex += 1;
-        if (this.trialIndex >= this.trials.length) {
+        if (this.trialIndex >= 10) {
           this.state = 'sessionComplete';
           this.endSession();
           return;
         }
 
-        this.currentTrialMeta = this.trials[this.trialIndex];
+        const anchorIdx = this.anchorOrder[this.trialIndex];
+        this.currentAnchorIndex = anchorIdx;
+        this.currentTrialMeta = this.startAnchors[anchorIdx];
+        this._highlightActiveAnchor(anchorIdx);
+
         this.startHoldTime = 0;
         this.endHoldTime = 0;
         this.accuracySamples = [];
@@ -902,13 +1063,13 @@
 
         this.centerEl.setAttribute('position', `${centerWorld.x} ${centerWorld.y} ${centerWorld.z}`);
         this.centerEl.setAttribute('visible', 'true');
-        this.centerEl.setAttribute('radius', '0.11');
-        this.centerEl.setAttribute('material', 'color: #66ccff; emissive: #66ccff; emissiveIntensity: 1.0; opacity: 0.96');
+        this.centerEl.setAttribute('radius', '0.09');
+        this.centerEl.setAttribute('material', 'color: #66ccff; emissive: #66ccff; emissiveIntensity: 1.05; opacity: 0.96');
 
         this.startEl.setAttribute('position', `${startWorld.x} ${startWorld.y} ${startWorld.z}`);
         this.startEl.setAttribute('visible', 'true');
-        this.startEl.setAttribute('radius', '0.11');
-        this.startEl.setAttribute('material', 'color: #ffd27a; emissive: #ffd27a; emissiveIntensity: 1.0; opacity: 0.96');
+        this.startEl.setAttribute('radius', '0.09');
+        this.startEl.setAttribute('material', 'color: #ffd27a; emissive: #ffd27a; emissiveIntensity: 1.05; opacity: 0.96');
 
         this._drawCurveAndCorridor(this.curveLocal, false);
 
@@ -917,7 +1078,7 @@
         this._placeBallAtProgress(0);
         this._updateCorridorAppearance();
 
-        this._showHud(`Trial ${this.trialIndex + 1}/10\nCharge the pearl at the start`);
+        this._showHud(`Trial ${this.trialIndex + 1}/10\nLook to the pearl and hold`);
         this._hideHoldTimer();
         this.state = 'acquireStart';
       },
@@ -956,11 +1117,11 @@
         if (!p) return;
 
         const dt = Math.min(timeDelta / 1000, 0.05);
-        const ballTol = 0.20;
-        const forwardRate = 0.16;
-        const rollbackRate = 0.06;
-        const startAngleTolDeg = 7.5;   // slightly looser
-        const finishAngleTolDeg = 7.5;  // slightly looser
+        const ballTol = 0.30;
+        const forwardRate = 0.19;
+        const rollbackRate = 0.045;
+        const startAngleTolDeg = 9.5;
+        const finishAngleTolDeg = 9.5;
 
         if (this.failFlashTimer > 0) {
           this.failFlashTimer -= dt;
@@ -972,6 +1133,7 @@
           if (ang <= startAngleTolDeg) {
             this.startHoldTime = 0;
             this.state = 'holdStart';
+            this._showHud(`Trial ${this.trialIndex + 1}/10\nHold on the pearl`);
           }
           return;
         }
@@ -981,14 +1143,14 @@
           if (ang > startAngleTolDeg) {
             this.startHoldTime = 0;
             this.state = 'acquireStart';
-            this._showHud(`Trial ${this.trialIndex + 1}/10\nCharge the pearl at the start`);
+            this._showHud(`Trial ${this.trialIndex + 1}/10\nLook to the pearl and hold`);
             this._hideHoldTimer();
             return;
           }
 
           this.startHoldTime += dt;
           const remain = Math.max(0, 5.0 - this.startHoldTime);
-          this._showHud(`Trial ${this.trialIndex + 1}/10\nCharge the pearl`);
+          this._showHud(`Trial ${this.trialIndex + 1}/10\nCharging pearl`);
           this._showHoldTimerAtLocal(this.startLocal, remain, 'Hold');
 
           if (this.startHoldTime >= 5.0) {
@@ -1012,12 +1174,13 @@
           if (within) {
             this.ballProgress = clamp(this.ballProgress + forwardRate * dt, 0, 1);
             const norm = clamp(dToBall / ballTol, 0, 1);
-            const acc = 1 - Math.pow(norm, 1.6);
+            const acc = 1 - Math.pow(norm, 1.4);
             this.accuracySamples.push(acc);
             this._setBallNormal();
+            this._showHud(`Trial ${this.trialIndex + 1}/10\nGuide the pearl to the coral`);
           } else {
             this.ballProgress = clamp(this.ballProgress - rollbackRate * dt, 0, 1);
-            this.failFlashTimer = 0.18;
+            this.failFlashTimer = 0.16;
             this._setBallFail();
             this._showHud(`Trial ${this.trialIndex + 1}/10\nPearl slipped - re-align`);
           }
@@ -1064,13 +1227,11 @@
               if (window.trainingActive && window.trainingMode === 'curveTrace' && !this.waitingForExitPress) {
                 this._nextTrial();
               }
-            }, 1900);
+            }, 1800);
           }
         }
       }
     });
-
-    /* ---------------- Training control ---------------- */
 
     function applyPursuitSettingsFromBaseline() {
       if (!baseline) return;
@@ -1231,8 +1392,6 @@
     <a-entity light="type: directional; intensity: 0.55; color: #b6f0ff" position="1 3 1"></a-entity>
     <a-entity light="type: point; intensity: 0.35; color: #52d8ff" position="0 3 -2"></a-entity>
 
-    <!-- Floor removed -->
-
     <a-entity id="rig">
       <a-camera position="0 0 0">
         <a-entity position="0 0 -1"
@@ -1241,7 +1400,6 @@
       </a-camera>
     </a-entity>
 
-    <!-- Pursuit target -->
     <a-entity id="star"
       pursuit3axis="mode: cycle; yawRangeDeg: 25; pitchRangeDeg: 15; rollRangeDeg: 10; distMin: 1.2; distMax: 2.2; speed: 0.20; jumpAmplitude: 0.7; arcBulge: 0.35;">
       <a-sphere radius="0.03"
@@ -1251,8 +1409,7 @@
                 animation="property: rotation; to: 0 360 0; loop: true; dur: 1800; easing: linear"></a-entity>
     </a-entity>
 
-    <!-- Central coral -->
-    <a-entity id="centralCoral" coral-growth position="0 0 -4.0">
+    <a-entity id="centralCoral" coral-growth position="0 0 -8.0">
       <a-cylinder class="coralBranch" height="0.32" radius="0.06" color="#7b2a83" position="0 0.16 0"></a-cylinder>
       <a-cylinder class="coralBranch" height="0.28" radius="0.042" color="#a84db6" position="-0.15 0.27 0.03" rotation="0 0 25"></a-cylinder>
       <a-cylinder class="coralBranch" height="0.28" radius="0.042" color="#6c4fe0" position="0.16 0.27 -0.02" rotation="0 0 -22"></a-cylinder>
@@ -1267,24 +1424,23 @@
                 material="color: #ff7ad6; emissive: #ff7ad6; emissiveIntensity: 0.52; opacity: 0.96"></a-sphere>
     </a-entity>
 
-    <!-- Trace controller and visuals -->
     <a-entity id="traceController" curve-trace-controller></a-entity>
 
-    <a-sphere id="traceCenter" visible="false" radius="0.11"
+    <a-sphere id="traceCenter" visible="false" radius="0.09"
               material="color: #66ccff; emissive: #66ccff; emissiveIntensity: 1.0; opacity: 0.96"></a-sphere>
 
-    <a-sphere id="traceStart" visible="false" radius="0.11"
+    <a-sphere id="traceStart" visible="false" radius="0.09"
               material="color: #ffd27a; emissive: #ffd27a; emissiveIntensity: 1.0; opacity: 0.96"></a-sphere>
 
-    <a-sphere id="traceBall" visible="false" radius="0.095"
+    <a-sphere id="traceBall" visible="false" radius="0.048"
               material="color: #fff8d6; emissive: #fff8d6; emissiveIntensity: 0.95; opacity: 0.98"></a-sphere>
 
     <a-entity id="traceHud" visible="false"
-              position="0 2.0 -1.55"
+              hud-follow="distance: 1.55; height: 0.28; smoothing: 0.12"
               text="value: ; align: center; width: 2.1; color: #FFFFFF"></a-entity>
 
     <a-entity id="holdTimerText" visible="false"
-              text="value: ; align: center; width: 1.2; color: #FFFFFF"></a-entity>
+              text="value: ; align: center; width: 1.25; color: #FFFFFF"></a-entity>
 
   </a-scene>
 </body>
