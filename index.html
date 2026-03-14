@@ -159,7 +159,7 @@
     let trainingActive = false;
     let trainingEndsAt = 0;
 
-    const STORAGE_KEY = 'trainer_rom_v13';
+    const STORAGE_KEY = 'trainer_rom_v14';
     const CAL = { idle:'idle', yaw:'yaw', pitch:'pitch', roll:'roll', done:'done' };
     let calPhase = CAL.idle;
     let extremes = null;
@@ -661,6 +661,11 @@
         this.waitingForExitPress = false;
         this.failFlashTimer = 0;
 
+        this.reacquireStartProgress = 0;
+        this.reacquireTargetProgress = 0.05;
+        this.reacquireElapsed = 0;
+        this.reacquireDuration = 0.32;
+
         this.sessionOriginWorld = new THREE.Vector3();
 
         this.startAnchors = [];
@@ -690,6 +695,9 @@
         this.currentAnchorIndex = -1;
         this.startAnchors = [];
         this.anchorOrder = [];
+        this.reacquireStartProgress = 0;
+        this.reacquireTargetProgress = 0.05;
+        this.reacquireElapsed = 0;
 
         if (this._introTimer) { clearTimeout(this._introTimer); this._introTimer = null; }
         if (this._trialAdvanceTimer) { clearTimeout(this._trialAdvanceTimer); this._trialAdvanceTimer = null; }
@@ -1059,8 +1067,19 @@
         this.ballEl.setAttribute('material', 'color: #ff6666; emissive: #ff6666; emissiveIntensity: 0.95; opacity: 0.98');
       },
 
-      _advancePearlAfterHold: function() {
-        this.ballProgress = clamp(Math.max(this.ballProgress, 0.03), 0, 0.97);
+      _beginPearlStartAdvance: function() {
+        this.reacquireStartProgress = this.ballProgress;
+        this.reacquireTargetProgress = clamp(Math.max(this.ballProgress, 0.05), 0, 0.97);
+        this.reacquireElapsed = 0;
+        this._placeBallAtProgress(this.ballProgress);
+        this._updateCorridorAppearance();
+      },
+
+      _updatePearlStartAdvance: function(dt) {
+        this.reacquireElapsed += dt;
+        const u = clamp(this.reacquireElapsed / this.reacquireDuration, 0, 1);
+        const eased = smoothstep(u);
+        this.ballProgress = this.reacquireStartProgress + (this.reacquireTargetProgress - this.reacquireStartProgress) * eased;
         this._placeBallAtProgress(this.ballProgress);
         this._updateCorridorAppearance();
       },
@@ -1086,6 +1105,9 @@
         this.ballProgress = 0;
         this.finishReached = false;
         this.failFlashTimer = 0;
+        this.reacquireStartProgress = 0;
+        this.reacquireTargetProgress = 0.05;
+        this.reacquireElapsed = 0;
 
         const startLocal = this._localFromAngles(this.currentTrialMeta.yawDeg, this.currentTrialMeta.pitchDeg, this.centerDistance);
         this.startLocal = startLocal.clone();
@@ -1159,8 +1181,8 @@
         const ballTol = 0.30;
         const forwardRate = 0.19;
         const rollbackRate = 0.045;
-        const startAngleTolDeg = 9.5;
-        const restartAngleTolDeg = 9.5;
+        const startAngleTolDeg = 4.5;
+        const restartAngleTolDeg = 6.0;
         const finishAngleTolDeg = 9.5;
         const slipTriggerSec = 0.35;
 
@@ -1192,12 +1214,27 @@
           this._showHoldTimerAtLocal(this.startLocal, remain, 'Hold');
 
           if (this.startHoldTime >= 5.0) {
-            this.state = 'traceActive';
             this.endHoldTime = 0;
             this.accuracySamples = [];
             this._drawCurveAndCorridor(this.curveLocal, true);
-            this._advancePearlAfterHold();
+            this._beginPearlStartAdvance();
             this._hideHoldTimer();
+            this.slipTime = 0;
+            this.state = 'reacquireAfterStart';
+          }
+          return;
+        }
+
+        if (this.state === 'reacquireAfterStart') {
+          this._updatePearlStartAdvance(dt);
+
+          const ballLocal = this._getBallLocal();
+          const ang = this._gazeAngleToLocalTarget(ballLocal);
+
+          if (ang <= restartAngleTolDeg) {
+            this.state = 'traceActive';
+            this.slipTime = 0;
+            this._setBallNormal();
           }
           return;
         }
@@ -1217,10 +1254,10 @@
           this._showHoldTimerAtLocal(ballLocal, remain, 'Restart');
 
           if (this.restartHoldTime >= 5.0) {
-            this.state = 'traceActive';
+            this.state = 'reacquireAfterStart';
             this.slipTime = 0;
             this._drawCurveAndCorridor(this.curveLocal, true);
-            this._advancePearlAfterHold();
+            this._beginPearlStartAdvance();
             this._hideHoldTimer();
           }
           return;
