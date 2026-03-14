@@ -159,7 +159,7 @@
     let trainingActive = false;
     let trainingEndsAt = 0;
 
-    const STORAGE_KEY = 'trainer_rom_v12';
+    const STORAGE_KEY = 'trainer_rom_v13';
     const CAL = { idle:'idle', yaw:'yaw', pitch:'pitch', roll:'roll', done:'done' };
     let calPhase = CAL.idle;
     let extremes = null;
@@ -642,13 +642,17 @@
         this.curveLine = null;
         this.corridorPoints = [];
         this.curveLocal = [];
-        this.centerLocal = new THREE.Vector3(0, 0, -8.0);
+
+        this.coralBaseLocal = new THREE.Vector3(0, 0, -8.0);
+        this.finishLocal = new THREE.Vector3(0, 0.04, -8.0);
+        this.centerDistance = 8.0;
 
         this.state = 'idle';
-        this.trials = [];
         this.trialIndex = -1;
         this.startHoldTime = 0;
+        this.restartHoldTime = 0;
         this.endHoldTime = 0;
+        this.slipTime = 0;
         this.accuracySamples = [];
         this.ballProgress = 0;
         this.finishReached = false;
@@ -657,7 +661,6 @@
         this.waitingForExitPress = false;
         this.failFlashTimer = 0;
 
-        this.worldHead = new THREE.Vector3();
         this.sessionOriginWorld = new THREE.Vector3();
 
         this.startAnchors = [];
@@ -665,6 +668,8 @@
         this.anchorIslandEls = [];
         this.currentAnchorIndex = -1;
 
+        this._introTimer = null;
+        this._trialAdvanceTimer = null;
         this._onSelect = this._onSelect.bind(this);
       },
 
@@ -672,7 +677,9 @@
         this.state = 'idle';
         this.trialIndex = -1;
         this.startHoldTime = 0;
+        this.restartHoldTime = 0;
         this.endHoldTime = 0;
+        this.slipTime = 0;
         this.accuracySamples = [];
         this.ballProgress = 0;
         this.finishReached = false;
@@ -683,6 +690,9 @@
         this.currentAnchorIndex = -1;
         this.startAnchors = [];
         this.anchorOrder = [];
+
+        if (this._introTimer) { clearTimeout(this._introTimer); this._introTimer = null; }
+        if (this._trialAdvanceTimer) { clearTimeout(this._trialAdvanceTimer); this._trialAdvanceTimer = null; }
 
         this._clearCurveVisuals();
         this._clearAnchorIslands();
@@ -719,12 +729,12 @@
         if (!rom || !window.qNeutral) return;
 
         this.centerDistance = 8.0;
-        this.centerLocal.set(0, 0, -this.centerDistance);
+        this.coralBaseLocal.set(0, 0, -this.centerDistance);
 
         this.cameraEl.object3D.getWorldPosition(this.sessionOriginWorld);
 
-        const centerWorld = this._localToWorld(this.centerLocal);
-        this.coralEl.setAttribute('position', `${centerWorld.x} ${centerWorld.y} ${centerWorld.z}`);
+        const coralWorld = this._localToWorld(this.coralBaseLocal);
+        this.coralEl.setAttribute('position', `${coralWorld.x} ${coralWorld.y} ${coralWorld.z}`);
 
         const yawHalf = (rom.yawROM / 2) * 0.95;
         const pitchHalf = (rom.pitchROM / 2) * 0.95;
@@ -734,8 +744,16 @@
         this.anchorOrder = order.slice(0, 10);
         this._createAnchorIslands();
 
-        this._showHud('Coral tracing\nPreparing...');
-        this._nextTrial();
+        this.state = 'intro';
+        this._showHud('10 trajectories\n\nHold on the pearl for 5 s to start or restart\nHold on the coral target for 5 s to feed the coral');
+
+        this._introTimer = setTimeout(() => {
+          this._introTimer = null;
+          if (window.trainingActive && window.trainingMode === 'curveTrace' && !this.waitingForExitPress) {
+            this.hudEl.setAttribute('visible', 'false');
+            this._nextTrial();
+          }
+        }, 2600);
       },
 
       endSession: function() {
@@ -880,7 +898,7 @@
         return fwdLocal.multiplyScalar(t);
       },
 
-      _buildCurveLocal: function(startLocal, centerLocal) {
+      _buildCurveLocal: function(startLocal, finishLocal) {
         const n = 120;
         const curve = [];
 
@@ -888,9 +906,9 @@
         const y0 = startLocal.y;
         const z0 = startLocal.z;
 
-        const x1 = centerLocal.x;
-        const y1 = centerLocal.y;
-        const z1 = centerLocal.z;
+        const x1 = finishLocal.x;
+        const y1 = finishLocal.y;
+        const z1 = finishLocal.z;
 
         const dx = x1 - x0;
         const dz = z1 - z0;
@@ -899,7 +917,6 @@
         const absDiff = Math.abs(verticalDiff);
 
         const sTurn = 1 / 3;
-
         const xTurn = x0 + dx * sTurn;
         const zTurn = z0 + dz * sTurn;
 
@@ -1026,12 +1043,26 @@
         this.ballEl.setAttribute('position', `${world.x} ${world.y} ${world.z}`);
       },
 
+      _getBallLocal: function() {
+        const idxFloat = clamp(this.ballProgress, 0, 1) * (this.curveLocal.length - 1);
+        const idx0 = Math.floor(idxFloat);
+        const idx1 = Math.min(this.curveLocal.length - 1, idx0 + 1);
+        const t = idxFloat - idx0;
+        return this.curveLocal[idx0].clone().lerp(this.curveLocal[idx1], t);
+      },
+
       _setBallNormal: function() {
         this.ballEl.setAttribute('material', 'color: #fff8d6; emissive: #fff8d6; emissiveIntensity: 0.95; opacity: 0.98');
       },
 
       _setBallFail: function() {
         this.ballEl.setAttribute('material', 'color: #ff6666; emissive: #ff6666; emissiveIntensity: 0.95; opacity: 0.98');
+      },
+
+      _advancePearlAfterHold: function() {
+        this.ballProgress = clamp(Math.max(this.ballProgress, 0.03), 0, 0.97);
+        this._placeBallAtProgress(this.ballProgress);
+        this._updateCorridorAppearance();
       },
 
       _nextTrial: function() {
@@ -1048,7 +1079,9 @@
         this._highlightActiveAnchor(anchorIdx);
 
         this.startHoldTime = 0;
+        this.restartHoldTime = 0;
         this.endHoldTime = 0;
+        this.slipTime = 0;
         this.accuracySamples = [];
         this.ballProgress = 0;
         this.finishReached = false;
@@ -1056,12 +1089,17 @@
 
         const startLocal = this._localFromAngles(this.currentTrialMeta.yawDeg, this.currentTrialMeta.pitchDeg, this.centerDistance);
         this.startLocal = startLocal.clone();
-        this.curveLocal = this._buildCurveLocal(this.startLocal, this.centerLocal);
 
-        const centerWorld = this._localToWorld(this.centerLocal);
+        const side = this.currentTrialMeta.yawDeg < 0 ? -1 : 1;
+        const finishOffsetX = 0.42;
+        this.finishLocal = this.coralBaseLocal.clone().add(new THREE.Vector3(side * finishOffsetX, 0.04, 0));
+
+        this.curveLocal = this._buildCurveLocal(this.startLocal, this.finishLocal);
+
+        const finishWorld = this._localToWorld(this.finishLocal);
         const startWorld = this._localToWorld(this.startLocal);
 
-        this.centerEl.setAttribute('position', `${centerWorld.x} ${centerWorld.y} ${centerWorld.z}`);
+        this.centerEl.setAttribute('position', `${finishWorld.x} ${finishWorld.y} ${finishWorld.z}`);
         this.centerEl.setAttribute('visible', 'true');
         this.centerEl.setAttribute('radius', '0.09');
         this.centerEl.setAttribute('material', 'color: #66ccff; emissive: #66ccff; emissiveIntensity: 1.05; opacity: 0.96');
@@ -1078,7 +1116,7 @@
         this._placeBallAtProgress(0);
         this._updateCorridorAppearance();
 
-        this._showHud(`Trial ${this.trialIndex + 1}/10\nLook to the pearl and hold`);
+        this.hudEl.setAttribute('visible', 'false');
         this._hideHoldTimer();
         this.state = 'acquireStart';
       },
@@ -1112,6 +1150,7 @@
         if (!window.trainingActive || window.trainingMode !== 'curveTrace') return;
         if (!this.cameraEl || !window.qNeutral || !window.baselineROM) return;
         if (this.waitingForExitPress) return;
+        if (this.state === 'intro' || this.state === 'idle' || this.state === 'sessionComplete') return;
 
         const p = this._getViewPointOnPlane();
         if (!p) return;
@@ -1121,7 +1160,9 @@
         const forwardRate = 0.19;
         const rollbackRate = 0.045;
         const startAngleTolDeg = 9.5;
+        const restartAngleTolDeg = 9.5;
         const finishAngleTolDeg = 9.5;
+        const slipTriggerSec = 0.35;
 
         if (this.failFlashTimer > 0) {
           this.failFlashTimer -= dt;
@@ -1133,7 +1174,6 @@
           if (ang <= startAngleTolDeg) {
             this.startHoldTime = 0;
             this.state = 'holdStart';
-            this._showHud(`Trial ${this.trialIndex + 1}/10\nHold on the pearl`);
           }
           return;
         }
@@ -1143,24 +1183,44 @@
           if (ang > startAngleTolDeg) {
             this.startHoldTime = 0;
             this.state = 'acquireStart';
-            this._showHud(`Trial ${this.trialIndex + 1}/10\nLook to the pearl and hold`);
             this._hideHoldTimer();
             return;
           }
 
           this.startHoldTime += dt;
           const remain = Math.max(0, 5.0 - this.startHoldTime);
-          this._showHud(`Trial ${this.trialIndex + 1}/10\nCharging pearl`);
           this._showHoldTimerAtLocal(this.startLocal, remain, 'Hold');
 
           if (this.startHoldTime >= 5.0) {
             this.state = 'traceActive';
-            this.ballProgress = 0;
             this.endHoldTime = 0;
             this.accuracySamples = [];
             this._drawCurveAndCorridor(this.curveLocal, true);
-            this._updateCorridorAppearance();
-            this._showHud(`Trial ${this.trialIndex + 1}/10\nGuide the pearl to the coral`);
+            this._advancePearlAfterHold();
+            this._hideHoldTimer();
+          }
+          return;
+        }
+
+        if (this.state === 'restartHold') {
+          const ballLocal = this._getBallLocal();
+          const ang = this._gazeAngleToLocalTarget(ballLocal);
+
+          if (ang > restartAngleTolDeg) {
+            this.restartHoldTime = 0;
+            this._hideHoldTimer();
+            return;
+          }
+
+          this.restartHoldTime += dt;
+          const remain = Math.max(0, 5.0 - this.restartHoldTime);
+          this._showHoldTimerAtLocal(ballLocal, remain, 'Restart');
+
+          if (this.restartHoldTime >= 5.0) {
+            this.state = 'traceActive';
+            this.slipTime = 0;
+            this._drawCurveAndCorridor(this.curveLocal, true);
+            this._advancePearlAfterHold();
             this._hideHoldTimer();
           }
           return;
@@ -1172,17 +1232,27 @@
           const within = dToBall <= ballTol;
 
           if (within) {
+            this.slipTime = 0;
             this.ballProgress = clamp(this.ballProgress + forwardRate * dt, 0, 1);
             const norm = clamp(dToBall / ballTol, 0, 1);
             const acc = 1 - Math.pow(norm, 1.4);
             this.accuracySamples.push(acc);
             this._setBallNormal();
-            this._showHud(`Trial ${this.trialIndex + 1}/10\nGuide the pearl to the coral`);
           } else {
+            this.slipTime += dt;
             this.ballProgress = clamp(this.ballProgress - rollbackRate * dt, 0, 1);
             this.failFlashTimer = 0.16;
             this._setBallFail();
-            this._showHud(`Trial ${this.trialIndex + 1}/10\nPearl slipped - re-align`);
+
+            if (this.slipTime >= slipTriggerSec) {
+              this.state = 'restartHold';
+              this.restartHoldTime = 0;
+              this.slipTime = 0;
+              this._hideHoldTimer();
+              this._placeBallAtProgress(this.ballProgress);
+              this._updateCorridorAppearance();
+              return;
+            }
           }
 
           this._placeBallAtProgress(this.ballProgress);
@@ -1191,25 +1261,22 @@
           if (this.ballProgress >= 0.995) {
             this.state = 'holdFinish';
             this.endHoldTime = 0;
-            this._showHud(`Trial ${this.trialIndex + 1}/10\nFeed the coral`);
           }
           return;
         }
 
         if (this.state === 'holdFinish') {
-          const ang = this._gazeAngleToLocalTarget(this.centerLocal);
+          const ang = this._gazeAngleToLocalTarget(this.finishLocal);
           if (ang > finishAngleTolDeg) {
             this.endHoldTime = 0;
             this.state = 'traceActive';
-            this._showHud(`Trial ${this.trialIndex + 1}/10\nGuide the pearl to the coral`);
             this._hideHoldTimer();
             return;
           }
 
           this.endHoldTime += dt;
           const remain = Math.max(0, 5.0 - this.endHoldTime);
-          this._showHud(`Trial ${this.trialIndex + 1}/10\nFeed the coral`);
-          this._showHoldTimerAtLocal(this.centerLocal, remain, 'Hold');
+          this._showHoldTimerAtLocal(this.finishLocal, remain, 'Feed');
 
           if (this.endHoldTime >= 5.0) {
             this.finishReached = true;
@@ -1220,14 +1287,14 @@
             if (coralComp) coralComp.grow();
 
             this.state = 'trialComplete';
-            this._showHud(`Trial ${this.trialIndex + 1}/10\nPearl delivered\nScore: ${score.toFixed(1)}%`);
             this._hideHoldTimer();
 
-            setTimeout(() => {
+            this._trialAdvanceTimer = setTimeout(() => {
+              this._trialAdvanceTimer = null;
               if (window.trainingActive && window.trainingMode === 'curveTrace' && !this.waitingForExitPress) {
                 this._nextTrial();
               }
-            }, 1800);
+            }, 900);
           }
         }
       }
@@ -1410,6 +1477,11 @@
     </a-entity>
 
     <a-entity id="centralCoral" coral-growth position="0 0 -8.0">
+      <a-cylinder height="0.08" radius="0.24" scale="2.2 1 1.4" rotation="90 0 0"
+                  material="color: #7a6f4a; emissive: #4f472d; emissiveIntensity: 0.18; opacity: 0.98"></a-cylinder>
+      <a-cylinder height="0.03" radius="0.17" scale="1.6 1 1.0" rotation="90 0 0" position="0 0.015 0.01"
+                  material="color: #938358; emissive: #5e5131; emissiveIntensity: 0.12; opacity: 0.98"></a-cylinder>
+
       <a-cylinder class="coralBranch" height="0.32" radius="0.06" color="#7b2a83" position="0 0.16 0"></a-cylinder>
       <a-cylinder class="coralBranch" height="0.28" radius="0.042" color="#a84db6" position="-0.15 0.27 0.03" rotation="0 0 25"></a-cylinder>
       <a-cylinder class="coralBranch" height="0.28" radius="0.042" color="#6c4fe0" position="0.16 0.27 -0.02" rotation="0 0 -22"></a-cylinder>
