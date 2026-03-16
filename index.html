@@ -236,10 +236,11 @@
     // ----------------------------
     // App-level constants / config
     // ----------------------------
-    const STORAGE_KEY = 'trainer_rom_v19';
+    const STORAGE_KEY = 'trainer_rom_v20';
 
     const CALIBRATION_PHASE = Object.freeze({
       IDLE: 'idle',
+      INTRO: 'intro',
       YAW: 'yaw',
       PITCH: 'pitch',
       DIAGONALS: 'diagonals',
@@ -290,12 +291,14 @@
         outerRadius: 1.2,
         maxRadius: 1.5,
         spokeExtent: 1.5,
+        introSec: 5,
         yawSec: 10,
         pitchSec: 10,
-        diagonalsSec: 10,
-        promptYaw: 'Move your head left and right along the horizontal line.',
-        promptPitch: 'Move your head up and down along the vertical line.',
-        promptDiagonals: 'Move outward and back along the diagonal guides.',
+        diagonalsSec: 15,
+        introPrompt: 'Follow highlighted lines: horizontal, vertical, then diagonal.',
+        promptYaw: 'Horizontal',
+        promptPitch: 'Vertical',
+        promptDiagonals: 'Diagonal',
         traceSampleMinDist: 0.025
       }
     });
@@ -896,6 +899,7 @@
 
         this.boardEl = document.querySelector('#calBoard');
         this.promptEl = document.querySelector('#calPromptText');
+        this.introHudEl = document.querySelector('#calIntroHud');
         this.cursorEl = document.querySelector('#calCursor');
         this.traceRoot = document.querySelector('#calTraceRoot');
 
@@ -965,15 +969,23 @@
         this.lastTracePt = null;
       },
 
-      setPrompt: function (text) {
-        this.promptEl.setAttribute('visible', 'true');
-        this.promptEl.setAttribute('text', {
+      showIntroHud: function (text) {
+        this.introHudEl.setAttribute('visible', 'true');
+        this.introHudEl.setAttribute('text', {
           value: text,
           align: 'center',
-          width: 2.3,
+          width: 2.4,
           color: '#FFFFFF',
-          wrapCount: 36
+          wrapCount: 34
         });
+      },
+
+      hideIntroHud: function () {
+        this.introHudEl.setAttribute('visible', 'false');
+      },
+
+      setPrompt: function (text) {
+        this.promptEl.setAttribute('visible', 'false');
       },
 
       setGuideHighlight: function (phase) {
@@ -1003,15 +1015,16 @@
       startSession: function (isRetest = false) {
         this.clearTraceDots();
         this.session = this.createSession(isRetest);
-        this.session.phase = CALIBRATION_PHASE.YAW;
+        this.session.phase = CALIBRATION_PHASE.INTRO;
         this.session.phaseStartedAt = performance.now();
 
         this.showBoard();
         this.setGuideHighlight(CALIBRATION_PHASE.YAW);
-        this.setPrompt(CONFIG.calibration.promptYaw);
+        this.showIntroHud(CONFIG.calibration.introPrompt);
+
         ui.calStatus.textContent = isRetest
-          ? 'Re-test calibration running: yaw.'
-          : 'Baseline calibration running: yaw.';
+          ? 'Re-test calibration: read intro, then yaw.'
+          : 'Baseline calibration: read intro, then yaw.';
       },
 
       finishSession: function () {
@@ -1042,12 +1055,25 @@
         };
 
         this.hideBoard();
+        this.hideIntroHud();
         applyCalibrationResult(result, this.session.isRetest);
         this.session.phase = CALIBRATION_PHASE.COMPLETE;
       },
 
       advancePhase: function () {
         if (!this.session) return;
+
+        if (this.session.phase === CALIBRATION_PHASE.INTRO) {
+          this.session.phase = CALIBRATION_PHASE.YAW;
+          this.session.phaseStartedAt = performance.now();
+          this.hideIntroHud();
+          this.setGuideHighlight(CALIBRATION_PHASE.YAW);
+          this.setPrompt(CONFIG.calibration.promptYaw);
+          ui.calStatus.textContent = this.session.isRetest
+            ? 'Re-test calibration running: yaw.'
+            : 'Baseline calibration running: yaw.';
+          return;
+        }
 
         if (this.session.phase === CALIBRATION_PHASE.YAW) {
           this.session.phase = CALIBRATION_PHASE.PITCH;
@@ -1168,6 +1194,14 @@
 
         const now = performance.now();
         const elapsedSec = (now - this.session.phaseStartedAt) / 1000;
+
+        if (this.session.phase === CALIBRATION_PHASE.INTRO) {
+          if (elapsedSec >= CONFIG.calibration.introSec) {
+            this.advancePhase();
+          }
+          return;
+        }
+
         const { yaw, pitch, roll } = getRelativeYPRDeg(camObj, appState.qNeutral);
 
         this.session.currentAngles.yaw = yaw;
@@ -2128,7 +2162,10 @@
 
       scene.addEventListener('exit-vr', () => {
         const calComp = getCalibrationController();
-        if (calComp) calComp.hideBoard();
+        if (calComp) {
+          calComp.hideBoard();
+          calComp.hideIntroHud();
+        }
         ui.calStatus.textContent = 'Exited VR. Enter VR again before calibration or training.';
       });
     });
@@ -2208,9 +2245,16 @@
 
       <a-entity id="calTraceRoot"></a-entity>
 
-      <a-entity id="calPromptText" position="0 1.75 0"
+      <a-entity id="calPromptText" visible="false" position="0 1.75 0"
                 text="value: ; align: center; width: 2.3; color: #FFFFFF"></a-entity>
     </a-entity>
+
+    <a-entity
+      id="calIntroHud"
+      visible="false"
+      hud-follow="distance: 1.45; height: 0.02; smoothing: 0.14"
+      text="value: ; align: center; width: 2.4; color: #FFFFFF"
+    ></a-entity>
 
     <a-entity
       id="star"
