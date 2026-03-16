@@ -6,39 +6,120 @@
   <title>Head Pursuit Trainer + Coral Tracing (Quest)</title>
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
   <style>
-    body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background:#061627; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      background: #061627;
+    }
+
     .panel {
-      position: fixed; left: 12px; top: 12px; z-index: 30;
-      width: min(640px, calc(100vw - 24px));
-      background: rgba(0,0,0,0.74); color: #fff;
-      padding: 12px 12px 10px; border-radius: 12px;
-      box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+      position: fixed;
+      left: 12px;
+      top: 12px;
+      z-index: 30;
+      width: min(680px, calc(100vw - 24px));
+      background: rgba(0, 0, 0, 0.74);
+      color: #fff;
+      padding: 12px 12px 10px;
+      border-radius: 12px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
       backdrop-filter: blur(6px);
     }
-    .title { font-weight: 800; margin-bottom: 6px; }
-    .mini { font-size: 12px; opacity: 0.9; line-height: 1.25; }
-    .grid { display:grid; grid-template-columns: 1fr 1fr; gap: 8px 10px; margin-top: 10px; }
-    .row { display:flex; gap:10px; align-items:center; margin: 8px 0; }
-    .row label { flex: 1 1 auto; font-size: 13px; opacity: 0.95; }
-    .row input[type="range"] { flex: 1 1 220px; }
-    .row output { width: 78px; text-align:right; font-variant-numeric: tabular-nums; opacity:0.95; }
-    button, select {
-      width: 100%; border-radius: 10px; border: 1px solid rgba(255,255,255,0.18);
-      background: rgba(255,255,255,0.10); color: #fff; padding: 10px 10px;
+
+    .title {
+      font-weight: 800;
+      margin-bottom: 6px;
+    }
+
+    .mini {
+      font-size: 12px;
+      opacity: 0.9;
+      line-height: 1.25;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px 10px;
+      margin-top: 10px;
+    }
+
+    .row {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      margin: 8px 0;
+    }
+
+    .row label {
+      flex: 1 1 auto;
+      font-size: 13px;
+      opacity: 0.95;
+    }
+
+    .row input[type="range"] {
+      flex: 1 1 220px;
+    }
+
+    .row output {
+      width: 78px;
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+      opacity: 0.95;
+    }
+
+    button,
+    select {
+      width: 100%;
+      border-radius: 10px;
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      background: rgba(255, 255, 255, 0.10);
+      color: #fff;
+      padding: 10px 10px;
       font-size: 14px;
     }
-    button.primary { background: rgba(120, 180, 255, 0.32); border-color: rgba(120,180,255,0.60); cursor:pointer; }
-    button.warn { background: rgba(255, 180, 120, 0.22); border-color: rgba(255,180,120,0.45); cursor:pointer; }
-    button:disabled { opacity: 0.45; cursor:not-allowed; }
+
+    button.primary {
+      background: rgba(120, 180, 255, 0.32);
+      border-color: rgba(120, 180, 255, 0.60);
+      cursor: pointer;
+    }
+
+    button.warn {
+      background: rgba(255, 180, 120, 0.22);
+      border-color: rgba(255, 180, 120, 0.45);
+      cursor: pointer;
+    }
+
+    button:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
     .box {
-      border: 1px solid rgba(255,255,255,0.16);
+      border: 1px solid rgba(255, 255, 255, 0.16);
       border-radius: 10px;
       padding: 10px;
-      background: rgba(255,255,255,0.05);
+      background: rgba(255, 255, 255, 0.05);
     }
-    .kv { display:grid; grid-template-columns: 1fr auto; gap: 6px 10px; font-size: 13px; }
-    .kv div:nth-child(2n) { text-align:right; font-variant-numeric: tabular-nums; }
-    .hr { height: 1px; background: rgba(255,255,255,0.12); margin: 10px 0; }
+
+    .kv {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 6px 10px;
+      font-size: 13px;
+    }
+
+    .kv div:nth-child(2n) {
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .hr {
+      height: 1px;
+      background: rgba(255, 255, 255, 0.12);
+      margin: 10px 0;
+    }
   </style>
 </head>
 
@@ -46,7 +127,7 @@
   <div class="panel" id="ui">
     <div class="title">Head Pursuit Trainer — Pursuit + Coral Tracing</div>
     <div class="mini">
-      Modes: continuous pursuit or 10-trial coral tracing game. Quest stationary boundary supported.
+      Calibration is now VR-only. Enter VR first, then set neutral, then run calibration.
     </div>
 
     <div class="grid">
@@ -61,7 +142,7 @@
 
       <div class="box">
         <div class="mini" style="margin-bottom:6px;"><b>Status</b></div>
-        <div class="mini" id="calStatus">Not started.</div>
+        <div class="mini" id="calStatus">Enter VR first to calibrate.</div>
         <div class="hr"></div>
         <div class="kv">
           <div>Neutral set</div><div id="neutralSet">No</div>
@@ -114,13 +195,15 @@
         </select>
       </div>
 
+      <button id="btnToggleVr" class="primary">Enter / Exit VR</button>
       <button id="btnSetNeutral" class="primary">1) Set Neutral</button>
+
       <button id="btnStartCal" class="primary">2) Calibrate ROM</button>
+      <button id="btnRetest" class="primary" disabled>3) Post-training Re-test</button>
 
-      <button id="btnEnterVr" class="primary" disabled>3) Start</button>
-      <button id="btnEndTraining" class="warn" disabled>End</button>
+      <button id="btnStartTraining" class="primary" disabled>4) Start Training</button>
+      <button id="btnEndTraining" class="warn" disabled>End Training</button>
 
-      <button id="btnRetest" class="primary" disabled>4) Post-training Re-test</button>
       <button id="btnClear" class="warn">Clear saved measurements</button>
 
       <div class="box" style="grid-column: 1 / -1;">
@@ -131,14 +214,17 @@
   </div>
 
   <script>
+    // ----------------------------
+    // Small math / formatting utils
+    // ----------------------------
     const rad2deg = r => r * 180 / Math.PI;
     const deg2rad = d => d * Math.PI / 180;
     const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
     const smoothstep = t => t * t * (3 - 2 * t);
     const $ = id => document.getElementById(id);
 
-    function fmt1(x){ return (Math.round(x*10)/10).toFixed(1); }
-    function fmtDeg(x){ return `${fmt1(x)}°`; }
+    function fmt1(x) { return (Math.round(x * 10) / 10).toFixed(1); }
+    function fmtDeg(x) { return `${fmt1(x)}°`; }
 
     function getRelativeYPRDeg(cameraObj3D, qNeutral) {
       const qCur = cameraObj3D.quaternion.clone();
@@ -147,199 +233,535 @@
       return { yaw: rad2deg(e.y), pitch: rad2deg(e.x), roll: rad2deg(e.z) };
     }
 
-    window.trainingActive = false;
-    window.trainingMode = 'pursuit';
-    window.qNeutral = null;
-    window.baselineROM = null;
+    // ----------------------------
+    // App-level constants / config
+    // ----------------------------
+    const STORAGE_KEY = 'trainer_rom_v18';
 
-    let qNeutral = new THREE.Quaternion();
-    let neutralCaptured = false;
-    let baseline = null;
-    let retest = null;
-    let trainingActive = false;
-    let trainingEndsAt = 0;
+    const CALIBRATION_PHASE = Object.freeze({
+      IDLE: 'idle',
+      YAW: 'yaw',
+      PITCH: 'pitch',
+      COMPLETE: 'complete'
+    });
 
-    const STORAGE_KEY = 'trainer_rom_v15';
-    const CAL = { idle:'idle', yaw:'yaw', pitch:'pitch', roll:'roll', done:'done' };
-    let calPhase = CAL.idle;
-    let extremes = null;
+    const CONFIG = Object.freeze({
+      pursuit: {
+        cycleOrder: 'drift,circle,figure8,jumps',
+        cycleMinSec: 35,
+        cycleMaxSec: 55,
+        distMin: 1.2,
+        distMax: 2.2,
+        holdMin: 0.55,
+        holdMax: 1.25,
+        circlePeriodSec: 11.0,
+        fig8PeriodSec: 13.0,
+        arcBulge: 0.35
+      },
 
-    const trainPct = $('trainPct');
-    const trainPctOut = $('trainPctOut');
-    const liveYaw = $('liveYaw'), livePitch = $('livePitch'), liveRoll = $('liveRoll');
-    const calStatus = $('calStatus');
-    const neutralSetEl = $('neutralSet');
-    const romYawEl = $('romYaw'), romPitchEl = $('romPitch'), romRollEl = $('romRoll');
-    const resultsEl = $('results');
-    const btnSetNeutral = $('btnSetNeutral');
-    const btnStartCal = $('btnStartCal');
-    const btnEnterVr = $('btnEnterVr');
-    const btnEndTraining = $('btnEndTraining');
-    const btnRetest = $('btnRetest');
-    const btnClear = $('btnClear');
-    const modeSelect = $('modeSelect');
+      trace: {
+        centerDistance: 8.0,
+        introMs: 2600,
+        advanceMs: 900,
+        anchorCountPerSession: 10,
+        finishOffsetX: 0.42,
+        holdSeconds: 5.0,
+        ballTolerance: 0.30,
+        forwardRate: 0.19,
+        rollbackRate: 0.045,
+        startAngleTolDeg: 4.5,
+        finishAngleTolDeg: 9.5,
+        failFlashSec: 0.16,
+        scoreAccWeight: 0.65,
+        scoreCoverageWeight: 0.25,
+        scoreEndWeight: 0.10,
+        curveSamples: 120,
+        corridorDotStep: 2,
+        corridorDotRadius: 0.13,
+        corridorLightWindow: 5,
+        holdTimerYOffset: 0.16,
+        startBallInitialProgress: 0.02
+      },
 
-    trainPct.addEventListener('input', () => trainPctOut.textContent = `${trainPct.value}%`);
-    trainPctOut.textContent = `${trainPct.value}%`;
+      calibration: {
+        boardDistance: 4.5,
+        innerRadius: 0.6,
+        outerRadius: 1.2,
+        maxRadius: 1.5,
+        spokeExtent: 1.5,
+        yawSec: 10,
+        pitchSec: 10,
+        promptYaw: 'Move your head left and right along the horizontal line.',
+        promptPitch: 'Move your head up and down along the vertical line.',
+        traceSampleMinDist: 0.025
+      }
+    });
+
+    // ----------------------------
+    // Shared app state
+    // ----------------------------
+    function makeLegacySummaryFromCalibration(cal) {
+      if (!cal) return null;
+      return {
+        yawROM: cal.rom.yawROM,
+        pitchROM: cal.rom.pitchROM,
+        rollROM: cal.rom.rollROM,
+        timestamp: cal.timestamp
+      };
+    }
+
+    const appState = {
+      qNeutral: new THREE.Quaternion(),
+      neutralCaptured: false,
+
+      trainingActive: false,
+      trainingMode: 'pursuit',
+      trainingEndsAt: 0,
+
+      baselineCalibration: null,
+      retestCalibration: null,
+
+      baseline: null,
+      retest: null
+    };
+
+    function syncWindowState() {
+      window.qNeutral = appState.qNeutral.clone();
+      window.baselineROM = appState.baseline;
+      window.trainingActive = appState.trainingActive;
+      window.trainingMode = appState.trainingMode;
+    }
+    syncWindowState();
+
+    // ----------------------------
+    // Cached UI elements
+    // ----------------------------
+    const ui = {
+      trainPct: $('trainPct'),
+      trainPctOut: $('trainPctOut'),
+      liveYaw: $('liveYaw'),
+      livePitch: $('livePitch'),
+      liveRoll: $('liveRoll'),
+      calStatus: $('calStatus'),
+      neutralSet: $('neutralSet'),
+      romYaw: $('romYaw'),
+      romPitch: $('romPitch'),
+      romRoll: $('romRoll'),
+      results: $('results'),
+      btnToggleVr: $('btnToggleVr'),
+      btnSetNeutral: $('btnSetNeutral'),
+      btnStartCal: $('btnStartCal'),
+      btnRetest: $('btnRetest'),
+      btnStartTraining: $('btnStartTraining'),
+      btnEndTraining: $('btnEndTraining'),
+      btnClear: $('btnClear'),
+      modeSelect: $('modeSelect'),
+      speed: $('speed'),
+      duration: $('duration'),
+      jumpAmp: $('jumpAmp')
+    };
+
+    // ----------------------------
+    // DOM / scene helpers
+    // ----------------------------
+    function getSceneEl() {
+      return document.querySelector('a-scene');
+    }
+
+    function getCameraEl() {
+      return document.querySelector('a-camera');
+    }
+
+    function getCameraObj() {
+      const cam = getCameraEl();
+      return cam ? cam.object3D : null;
+    }
+
+    function getTraceController() {
+      const el = document.querySelector('#traceController');
+      return el && el.components['curve-trace-controller'];
+    }
+
+    function getCalibrationController() {
+      const el = document.querySelector('#calibrationController');
+      return el && el.components['calibration-controller'];
+    }
+
+    function getPursuitStarEl() {
+      return document.querySelector('#star');
+    }
+
+    function isInVrMode() {
+      const scene = getSceneEl();
+      return !!(scene && scene.is && scene.is('vr-mode'));
+    }
+
+    // ----------------------------
+    // Storage / persistence
+    // ----------------------------
+    function saveCalibrationData() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        baselineCalibration: appState.baselineCalibration,
+        retestCalibration: appState.retestCalibration
+      }));
+    }
 
     function loadSaved() {
       try {
         const raw = localStorage.getItem(STORAGE_KEY);
         if (!raw) return;
-        const parsed = JSON.parse(raw);
-        baseline = parsed.baseline || null;
-        retest = parsed.retest || null;
-        updateResultsUI();
-        if (baseline) {
-          romYawEl.textContent = fmtDeg(baseline.yawROM);
-          romPitchEl.textContent = fmtDeg(baseline.pitchROM);
-          romRollEl.textContent = fmtDeg(baseline.rollROM);
-          calStatus.textContent = 'Baseline ROM loaded. Set Neutral to proceed.';
-          window.baselineROM = baseline;
-        }
-      } catch {}
-    }
 
-    function saveROM() {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ baseline, retest }));
+        const parsed = JSON.parse(raw);
+
+        appState.baselineCalibration = parsed.baselineCalibration || null;
+        appState.retestCalibration = parsed.retestCalibration || null;
+        appState.baseline = makeLegacySummaryFromCalibration(appState.baselineCalibration);
+        appState.retest = makeLegacySummaryFromCalibration(appState.retestCalibration);
+
+        syncWindowState();
+
+        if (appState.baseline) {
+          updateROMUI(appState.baseline);
+          ui.calStatus.textContent = 'Saved calibration loaded. Enter VR, then set neutral.';
+          ui.btnStartTraining.disabled = false;
+        }
+
+        updateResultsUI();
+      } catch {
+        ui.calStatus.textContent = 'Could not load saved measurements.';
+      }
     }
 
     function clearSaved() {
-      baseline = null;
-      retest = null;
-      window.baselineROM = null;
+      appState.baselineCalibration = null;
+      appState.retestCalibration = null;
+      appState.baseline = null;
+      appState.retest = null;
+
       localStorage.removeItem(STORAGE_KEY);
-      romYawEl.textContent = '—';
-      romPitchEl.textContent = '—';
-      romRollEl.textContent = '—';
+      syncWindowState();
+
+      ui.romYaw.textContent = '—';
+      ui.romPitch.textContent = '—';
+      ui.romRoll.textContent = '—';
+      ui.btnStartTraining.disabled = true;
+      ui.btnRetest.disabled = true;
+      ui.calStatus.textContent = 'Cleared saved measurements.';
       updateResultsUI();
-      calStatus.textContent = 'Cleared saved measurements.';
-      btnEnterVr.disabled = true;
-      btnRetest.disabled = true;
+    }
+
+    // ----------------------------
+    // UI rendering helpers
+    // ----------------------------
+    function updateROMUI(romObj) {
+      ui.romYaw.textContent = fmtDeg(romObj.yawROM || 0);
+      ui.romPitch.textContent = fmtDeg(romObj.pitchROM || 0);
+      ui.romRoll.textContent = fmtDeg(romObj.rollROM || 0);
+    }
+
+    function setNeutralUI(isSet) {
+      ui.neutralSet.textContent = isSet ? 'Yes' : 'No';
     }
 
     function updateResultsUI() {
-      if (!baseline && !retest) {
-        resultsEl.textContent = 'No results yet.';
+      const baselineCal = appState.baselineCalibration;
+      const retestCal = appState.retestCalibration;
+
+      if (!baselineCal && !retestCal) {
+        ui.results.textContent = 'No results yet.';
         return;
       }
-      if (baseline && !retest) {
-        resultsEl.innerHTML =
-          `Baseline (${new Date(baseline.timestamp).toLocaleString()}): ` +
-          `Yaw ${fmtDeg(baseline.yawROM)}, Pitch ${fmtDeg(baseline.pitchROM)}, Roll ${fmtDeg(baseline.rollROM)}. ` +
-          `Run training then do Re-test.`;
+
+      if (baselineCal && !retestCal) {
+        ui.results.innerHTML =
+          `<div>Baseline (${new Date(baselineCal.timestamp).toLocaleString()}): ` +
+          `Yaw ${fmtDeg(baselineCal.rom.yawROM)} | Pitch ${fmtDeg(baselineCal.rom.pitchROM)} | Roll ${fmtDeg(baselineCal.rom.rollROM)}</div>` +
+          `<div>Signed extrema: ` +
+          `L yaw ${fmtDeg(baselineCal.signedExtrema.leftYawMax)}, ` +
+          `R yaw ${fmtDeg(baselineCal.signedExtrema.rightYawMax)}, ` +
+          `Down pitch ${fmtDeg(baselineCal.signedExtrema.downPitchMax)}, ` +
+          `Up pitch ${fmtDeg(baselineCal.signedExtrema.upPitchMax)}</div>` +
+          (baselineCal.warnings?.length
+            ? `<div>Warnings: ${baselineCal.warnings.join(' | ')}</div>`
+            : `<div>No warnings.</div>`);
         return;
       }
-      if (baseline && retest) {
-        const dYaw = retest.yawROM - baseline.yawROM;
-        const dPitch = retest.pitchROM - baseline.pitchROM;
-        const dRoll = retest.rollROM - baseline.rollROM;
-        const sign = v => (v>=0 ? '+' : '');
-        resultsEl.innerHTML =
-          `<div>Baseline (${new Date(baseline.timestamp).toLocaleString()}): ` +
-          `Yaw ${fmtDeg(baseline.yawROM)} | Pitch ${fmtDeg(baseline.pitchROM)} | Roll ${fmtDeg(baseline.rollROM)}</div>` +
-          `<div>Re-test (${new Date(retest.timestamp).toLocaleString()}): ` +
-          `Yaw ${fmtDeg(retest.yawROM)} | Pitch ${fmtDeg(retest.pitchROM)} | Roll ${fmtDeg(retest.rollROM)}</div>` +
-          `<div><b>Change:</b> ` +
-          `Yaw ${sign(dYaw)}${fmtDeg(dYaw)} | Pitch ${sign(dPitch)}${fmtDeg(dPitch)} | Roll ${sign(dRoll)}${fmtDeg(dRoll)}</div>`;
+
+      if (baselineCal && retestCal) {
+        const dYaw = retestCal.rom.yawROM - baselineCal.rom.yawROM;
+        const dPitch = retestCal.rom.pitchROM - baselineCal.rom.pitchROM;
+        const dRoll = retestCal.rom.rollROM - baselineCal.rom.rollROM;
+        const sign = v => (v >= 0 ? '+' : '');
+
+        ui.results.innerHTML =
+          `<div>Baseline: Yaw ${fmtDeg(baselineCal.rom.yawROM)} | Pitch ${fmtDeg(baselineCal.rom.pitchROM)} | Roll ${fmtDeg(baselineCal.rom.rollROM)}</div>` +
+          `<div>Re-test: Yaw ${fmtDeg(retestCal.rom.yawROM)} | Pitch ${fmtDeg(retestCal.rom.pitchROM)} | Roll ${fmtDeg(retestCal.rom.rollROM)}</div>` +
+          `<div><b>Change:</b> Yaw ${sign(dYaw)}${fmtDeg(dYaw)} | Pitch ${sign(dPitch)}${fmtDeg(dPitch)} | Roll ${sign(dRoll)}${fmtDeg(dRoll)}</div>` +
+          (retestCal.warnings?.length
+            ? `<div>Re-test warnings: ${retestCal.warnings.join(' | ')}</div>`
+            : `<div>No re-test warnings.</div>`);
       }
     }
 
-    function getCameraObj() {
-      const cam = document.querySelector('a-camera');
-      return cam ? cam.object3D : null;
+    // ----------------------------
+    // Calibration save helper
+    // ----------------------------
+    function applyCalibrationResult(result, isRetest) {
+      if (isRetest) {
+        appState.retestCalibration = result;
+        appState.retest = makeLegacySummaryFromCalibration(result);
+      } else {
+        appState.baselineCalibration = result;
+        appState.baseline = makeLegacySummaryFromCalibration(result);
+        appState.retestCalibration = null;
+        appState.retest = null;
+      }
+
+      syncWindowState();
+      updateROMUI(makeLegacySummaryFromCalibration(result));
+      saveCalibrationData();
+      updateResultsUI();
+
+      if (!isRetest) {
+        ui.btnStartTraining.disabled = false;
+        ui.btnRetest.disabled = true;
+        ui.calStatus.textContent = 'Baseline calibration saved. You can start training.';
+      } else {
+        ui.btnRetest.disabled = true;
+        ui.calStatus.textContent = 'Re-test calibration saved.';
+      }
+    }
+
+    // ----------------------------
+    // Neutral / VR flow
+    // ----------------------------
+    function toggleVr() {
+      const scene = getSceneEl();
+      if (!scene) return;
+
+      if (isInVrMode()) {
+        scene.exitVR && scene.exitVR();
+      } else {
+        scene.enterVR && scene.enterVR();
+      }
     }
 
     function setNeutral() {
+      if (!isInVrMode()) {
+        ui.calStatus.textContent = 'Enter VR first, then set neutral.';
+        return;
+      }
+
       const camObj = getCameraObj();
       if (!camObj) {
-        calStatus.textContent = 'Camera not ready yet.';
+        ui.calStatus.textContent = 'Camera not ready yet.';
         return;
       }
-      qNeutral.copy(camObj.quaternion);
-      neutralCaptured = true;
-      neutralSetEl.textContent = 'Yes';
-      window.qNeutral = qNeutral.clone();
-      calStatus.textContent = 'Neutral set. Now calibrate ROM.';
-      btnStartCal.disabled = false;
+
+      appState.qNeutral.copy(camObj.quaternion);
+      appState.neutralCaptured = true;
+      setNeutralUI(true);
+      syncWindowState();
+
+      const calComp = getCalibrationController();
+      if (calComp) calComp.repositionBoardToNeutral();
+
+      ui.calStatus.textContent = 'Neutral set. You can now run calibration.';
+      ui.btnStartCal.disabled = false;
     }
 
-    function resetExtremes() {
-      extremes = {
-        yawMin: 999, yawMax: -999,
-        pitchMin: 999, pitchMax: -999,
-        rollMin: 999, rollMax: -999
-      };
-    }
-
-    async function runCalibration(isRetest=false) {
-      if (!neutralCaptured) {
-        calStatus.textContent = 'Set Neutral first.';
+    function startCalibration(isRetest = false) {
+      if (!isInVrMode()) {
+        ui.calStatus.textContent = 'Enter VR first to begin calibration.';
         return;
       }
-      resetExtremes();
 
-      const phases = [
-        { key: CAL.yaw, seconds: 10, prompt: 'Yaw: slowly turn LEFT then RIGHT, a few times.' },
-        { key: CAL.pitch, seconds: 10, prompt: 'Pitch: slowly look UP then DOWN, a few times.' },
-        { key: CAL.roll, seconds: 10, prompt: 'Roll: slowly tilt LEFT then RIGHT, a few times.' }
-      ];
-
-      calStatus.textContent = 'Calibration starting...';
-      calPhase = CAL.yaw;
-
-      for (const p of phases) {
-        calPhase = p.key;
-        calStatus.textContent = p.prompt;
-        const start = performance.now();
-        while ((performance.now() - start) < p.seconds * 1000) {
-          await new Promise(r => requestAnimationFrame(r));
-        }
+      if (!appState.neutralCaptured) {
+        ui.calStatus.textContent = 'Set neutral first.';
+        return;
       }
 
-      calPhase = CAL.done;
-      const yawROM = Math.abs(extremes.yawMax - extremes.yawMin);
-      const pitchROM = Math.abs(extremes.pitchMax - extremes.pitchMin);
-      const rollROM = Math.abs(extremes.rollMax - extremes.rollMin);
-      const romObj = { yawROM, pitchROM, rollROM, timestamp: Date.now() };
+      if (appState.trainingActive) {
+        ui.calStatus.textContent = 'End training before calibration.';
+        return;
+      }
 
-      romYawEl.textContent = fmtDeg(romObj.yawROM);
-      romPitchEl.textContent = fmtDeg(romObj.pitchROM);
-      romRollEl.textContent = fmtDeg(romObj.rollROM);
+      const calComp = getCalibrationController();
+      if (!calComp) {
+        ui.calStatus.textContent = 'Calibration controller not ready.';
+        return;
+      }
 
-      if (!isRetest) {
-        baseline = romObj;
-        retest = null;
-        window.baselineROM = baseline;
-        calStatus.textContent = 'Baseline ROM saved. You can start training.';
-        btnEnterVr.disabled = false;
-        btnRetest.disabled = true;
+      ui.btnStartCal.disabled = true;
+      ui.btnRetest.disabled = true;
+      ui.btnStartTraining.disabled = true;
+      calComp.startSession(isRetest);
+    }
+
+    // ----------------------------
+    // Pursuit mode wiring
+    // ----------------------------
+    function applyPursuitSettingsFromBaseline() {
+      const baseline = appState.baseline;
+      if (!baseline) return;
+
+      const pct = parseFloat(ui.trainPct.value) / 100;
+      const yawRangeDeg = (baseline.yawROM / 2) * pct;
+      const pitchRangeDeg = (baseline.pitchROM / 2) * pct;
+      const rollRangeDeg = (baseline.rollROM / 2) * pct;
+      const speed = parseFloat(ui.speed.value);
+      const jumpAmp = parseFloat(ui.jumpAmp.value);
+
+      const star = getPursuitStarEl();
+      if (!star) return;
+
+      const attrs = [
+        `mode: cycle`,
+        `cycleOrder: ${CONFIG.pursuit.cycleOrder}`,
+        `cycleMinSec: ${CONFIG.pursuit.cycleMinSec}`,
+        `cycleMaxSec: ${CONFIG.pursuit.cycleMaxSec}`,
+        `yawRangeDeg: ${clamp(yawRangeDeg, 0, 80)}`,
+        `pitchRangeDeg: ${clamp(pitchRangeDeg, 0, 60)}`,
+        `rollRangeDeg: ${clamp(rollRangeDeg, 0, 40)}`,
+        `distMin: ${CONFIG.pursuit.distMin}`,
+        `distMax: ${CONFIG.pursuit.distMax}`,
+        `speed: ${speed}`,
+        `holdMin: ${CONFIG.pursuit.holdMin}`,
+        `holdMax: ${CONFIG.pursuit.holdMax}`,
+        `circlePeriodSec: ${CONFIG.pursuit.circlePeriodSec}`,
+        `fig8PeriodSec: ${CONFIG.pursuit.fig8PeriodSec}`,
+        `jumpAmplitude: ${jumpAmp}`,
+        `arcBulge: ${CONFIG.pursuit.arcBulge}`
+      ].join('; ');
+
+      star.setAttribute('pursuit3axis', attrs);
+    }
+
+    function resetPursuitStar() {
+      const starEl = getPursuitStarEl();
+      const comp = starEl && starEl.components.pursuit3axis;
+      if (comp) comp._snapToInitial();
+    }
+
+    // ----------------------------
+    // Training flow
+    // ----------------------------
+    function startTraining() {
+      if (!appState.baseline) {
+        ui.calStatus.textContent = 'Please run baseline calibration first.';
+        return;
+      }
+
+      if (!appState.neutralCaptured) {
+        ui.calStatus.textContent = 'Please set neutral first.';
+        return;
+      }
+
+      if (!isInVrMode()) {
+        ui.calStatus.textContent = 'Enter VR first, then start training.';
+        return;
+      }
+
+      appState.trainingMode = ui.modeSelect.value;
+      appState.trainingActive = true;
+
+      syncWindowState();
+
+      ui.btnStartTraining.disabled = true;
+      ui.btnStartCal.disabled = true;
+      ui.btnSetNeutral.disabled = true;
+      ui.btnEndTraining.disabled = false;
+      ui.btnRetest.disabled = true;
+
+      if (appState.trainingMode === 'pursuit') {
+        applyPursuitSettingsFromBaseline();
+        resetPursuitStar();
+
+        const durationSec = parseInt(ui.duration.value, 10);
+        appState.trainingEndsAt = performance.now() + durationSec * 1000;
+        ui.calStatus.textContent = `Pursuit running (${durationSec / 60} min).`;
       } else {
-        retest = romObj;
-        calStatus.textContent = 'Re-test saved.';
+        appState.trainingEndsAt = Infinity;
+        const traceController = getTraceController();
+        if (traceController) traceController.startSession();
+        ui.calStatus.textContent = 'Coral tracing running (10 trials).';
       }
-
-      saveROM();
-      updateResultsUI();
     }
 
+    function endTraining(reason = 'manual') {
+      if (!appState.trainingActive) return;
+
+      appState.trainingActive = false;
+      syncWindowState();
+
+      const traceController = getTraceController();
+      if (traceController) traceController.resetSession();
+
+      ui.btnEndTraining.disabled = true;
+      ui.btnRetest.disabled = true;
+      ui.btnSetNeutral.disabled = false;
+      ui.btnStartCal.disabled = false;
+      ui.btnStartTraining.disabled = false;
+
+      if (reason === 'timer') {
+        ui.calStatus.textContent = 'Training finished. Set neutral again, then run post-training re-test.';
+      } else if (reason === 'modeComplete') {
+        ui.calStatus.textContent = 'Returned to main menu. Set neutral again, then run post-training re-test.';
+      } else {
+        ui.calStatus.textContent = 'Training ended. Set neutral again, then run post-training re-test.';
+      }
+
+      if (appState.baseline) ui.btnRetest.disabled = false;
+    }
+
+    // ----------------------------
+    // Per-frame app loop
+    // ----------------------------
+    function rafLoop() {
+      const camObj = getCameraObj();
+
+      if (camObj && appState.neutralCaptured) {
+        const { yaw, pitch, roll } = getRelativeYPRDeg(camObj, appState.qNeutral);
+        ui.liveYaw.textContent = fmt1(yaw);
+        ui.livePitch.textContent = fmt1(pitch);
+        ui.liveRoll.textContent = fmt1(roll);
+      }
+
+      if (
+        appState.trainingActive &&
+        appState.trainingMode === 'pursuit' &&
+        performance.now() >= appState.trainingEndsAt
+      ) {
+        endTraining('timer');
+      }
+
+      requestAnimationFrame(rafLoop);
+    }
+
+    // ----------------------------
+    // A-Frame: background particles
+    // ----------------------------
     AFRAME.registerComponent('underwater-particles', {
       schema: {
-        count: { type:'int', default: 1600 },
-        radius: { type:'number', default: 34 },
-        height: { type:'number', default: 20 },
-        size: { type:'number', default: 0.05 }
+        count: { type: 'int', default: 1600 },
+        radius: { type: 'number', default: 34 },
+        height: { type: 'number', default: 20 },
+        size: { type: 'number', default: 0.05 }
       },
-      init: function() {
+
+      init: function () {
         const d = this.data;
         const positions = new Float32Array(d.count * 3);
+
         for (let i = 0; i < d.count; i++) {
-          positions[i*3+0] = (Math.random()*2 - 1) * d.radius;
-          positions[i*3+1] = Math.random() * d.height - 2;
-          positions[i*3+2] = (Math.random()*2 - 1) * d.radius;
+          positions[i * 3 + 0] = (Math.random() * 2 - 1) * d.radius;
+          positions[i * 3 + 1] = Math.random() * d.height - 2;
+          positions[i * 3 + 2] = (Math.random() * 2 - 1) * d.radius;
         }
+
         const geom = new THREE.BufferGeometry();
         geom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+
         const mat = new THREE.PointsMaterial({
           size: d.size,
           sizeAttenuation: true,
@@ -347,13 +769,17 @@
           transparent: true,
           opacity: 0.28
         });
+
         this.points = new THREE.Points(geom, mat);
         this.el.setObject3D('mesh', this.points);
       }
     });
 
+    // ----------------------------
+    // A-Frame: coral growth logic
+    // ----------------------------
     AFRAME.registerComponent('coral-growth', {
-      init: function() {
+      init: function () {
         this.stage = 0;
         this.baseScales = [];
         this.branchEls = Array.from(this.el.querySelectorAll('.coralBranch'));
@@ -365,29 +791,33 @@
           this.baseScales.push(branch.object3D.scale.clone());
         });
       },
-      resetGrowth: function() {
+
+      resetGrowth: function () {
         this.stage = 0;
         this.el.object3D.scale.set(1.0, 1.0, 1.0);
 
         this.branchEls.forEach((branch, i) => {
-          const s = this.baseScales[i] || new THREE.Vector3(1,1,1);
+          const s = this.baseScales[i] || new THREE.Vector3(1, 1, 1);
           branch.object3D.scale.copy(s);
         });
 
         this.glowEls.forEach((g, idx) => {
-          g.object3D.scale.set(1,1,1);
-          g.setAttribute('material',
-            `color: ${idx % 2 === 0 ? '#ff7ad6' : '#7afff0'}; emissive: ${idx % 2 === 0 ? '#ff7ad6' : '#7afff0'}; emissiveIntensity: 0.55; opacity: 0.96`);
+          g.object3D.scale.set(1, 1, 1);
+          g.setAttribute(
+            'material',
+            `color: ${idx % 2 === 0 ? '#ff7ad6' : '#7afff0'}; emissive: ${idx % 2 === 0 ? '#ff7ad6' : '#7afff0'}; emissiveIntensity: 0.55; opacity: 0.96`
+          );
         });
       },
-      grow: function() {
+
+      grow: function () {
         this.stage = Math.min(10, this.stage + 1);
 
         const s = 1.0 + 0.24 * this.stage;
         this.el.object3D.scale.set(s * 0.96, s * 1.18, s * 0.96);
 
         this.branchEls.forEach((branch, i) => {
-          const base = this.baseScales[i] || new THREE.Vector3(1,1,1);
+          const base = this.baseScales[i] || new THREE.Vector3(1, 1, 1);
           const multY = 1 + 0.10 * this.stage;
           const multXZ = 1 + 0.04 * this.stage;
           branch.object3D.scale.set(base.x * multXZ, base.y * multY, base.z * multXZ);
@@ -397,25 +827,32 @@
           const glowScale = 1 + 0.08 * this.stage + idx * 0.02;
           g.object3D.scale.set(glowScale, glowScale, glowScale);
           const base = 0.55 + 0.14 * this.stage + idx * 0.05;
-          g.setAttribute('material',
-            `color: ${idx % 2 === 0 ? '#ff7ad6' : '#7afff0'}; emissive: ${idx % 2 === 0 ? '#ff7ad6' : '#7afff0'}; emissiveIntensity: ${base}; opacity: 0.96`);
+          g.setAttribute(
+            'material',
+            `color: ${idx % 2 === 0 ? '#ff7ad6' : '#7afff0'}; emissive: ${idx % 2 === 0 ? '#ff7ad6' : '#7afff0'}; emissiveIntensity: ${base}; opacity: 0.96`
+          );
         });
       }
     });
 
+    // ----------------------------
+    // A-Frame: head-following HUD
+    // ----------------------------
     AFRAME.registerComponent('hud-follow', {
       schema: {
         distance: { type: 'number', default: 1.55 },
         height: { type: 'number', default: 0.28 },
         smoothing: { type: 'number', default: 0.12 }
       },
+
       init: function () {
-        this.cameraEl = document.querySelector('a-camera');
+        this.cameraEl = getCameraEl();
         this.targetPos = new THREE.Vector3();
         this.currentPos = new THREE.Vector3();
         this.tempDir = new THREE.Vector3();
         this.started = false;
       },
+
       tick: function () {
         if (!this.cameraEl) return;
 
@@ -425,10 +862,12 @@
 
         this.tempDir.set(0, 0, -1).applyQuaternion(camObj.quaternion).normalize();
         this.tempDir.y = 0;
-        if (this.tempDir.lengthSq() < 1e-6) this.tempDir.set(0,0,-1);
+
+        if (this.tempDir.lengthSq() < 1e-6) this.tempDir.set(0, 0, -1);
         this.tempDir.normalize();
 
-        this.targetPos.copy(camWorld)
+        this.targetPos
+          .copy(camWorld)
           .add(this.tempDir.multiplyScalar(this.data.distance))
           .add(new THREE.Vector3(0, this.data.height, 0));
 
@@ -444,22 +883,303 @@
       }
     });
 
+    // ----------------------------
+    // A-Frame: new calibration controller
+    // ----------------------------
+    AFRAME.registerComponent('calibration-controller', {
+      init: function () {
+        this.cameraEl = getCameraEl();
+        this.sceneElRef = this.el.sceneEl;
+
+        this.boardEl = document.querySelector('#calBoard');
+        this.promptEl = document.querySelector('#calPromptText');
+        this.cursorEl = document.querySelector('#calCursor');
+        this.traceRoot = document.querySelector('#calTraceRoot');
+
+        this.hLine = document.querySelector('#calHLine');
+        this.vLine = document.querySelector('#calVLine');
+
+        this.session = null;
+        this.lastTracePt = null;
+        this.traceDots = [];
+      },
+
+      createSession: function (isRetest) {
+        return {
+          isRetest,
+          phase: CALIBRATION_PHASE.IDLE,
+          phaseStartedAt: 0,
+          currentAngles: { yaw: 0, pitch: 0, roll: 0 },
+          cursor: { x: 0, y: 0 },
+          traces: {
+            yaw: [],
+            pitch: []
+          },
+          extrema: {
+            leftYawMax: 0,
+            rightYawMax: 0,
+            downPitchMax: 0,
+            upPitchMax: 0,
+            leftRollMax: 0,
+            rightRollMax: 0
+          },
+          warnings: []
+        };
+      },
+
+      repositionBoardToNeutral: function () {
+        if (!this.cameraEl || !window.qNeutral) return;
+
+        const headWorld = new THREE.Vector3();
+        this.cameraEl.object3D.getWorldPosition(headWorld);
+
+        const forward = new THREE.Vector3(0, 0, -1)
+          .applyQuaternion(window.qNeutral)
+          .normalize();
+
+        const pos = headWorld.clone().add(forward.multiplyScalar(CONFIG.calibration.boardDistance));
+        this.boardEl.object3D.position.copy(pos);
+
+        const lookAtPos = headWorld.clone();
+        this.boardEl.object3D.lookAt(lookAtPos);
+      },
+
+      showBoard: function () {
+        this.repositionBoardToNeutral();
+        this.boardEl.setAttribute('visible', 'true');
+      },
+
+      hideBoard: function () {
+        this.boardEl.setAttribute('visible', 'false');
+      },
+
+      clearTraceDots: function () {
+        this.traceDots.forEach(el => el.parentNode && el.parentNode.removeChild(el));
+        this.traceDots = [];
+        this.lastTracePt = null;
+      },
+
+      setPrompt: function (text) {
+        this.promptEl.setAttribute('visible', 'true');
+        this.promptEl.setAttribute('text', {
+          value: text,
+          align: 'center',
+          width: 2.3,
+          color: '#FFFFFF',
+          wrapCount: 36
+        });
+      },
+
+      setGuideHighlight: function (phase) {
+        this.hLine.setAttribute(
+          'material',
+          phase === CALIBRATION_PHASE.YAW
+            ? 'color: #dff8ff; emissive: #dff8ff; emissiveIntensity: 1.0; opacity: 0.95'
+            : 'color: #7bdcff; emissive: #7bdcff; emissiveIntensity: 0.35; opacity: 0.55'
+        );
+
+        this.vLine.setAttribute(
+          'material',
+          phase === CALIBRATION_PHASE.PITCH
+            ? 'color: #dff8ff; emissive: #dff8ff; emissiveIntensity: 1.0; opacity: 0.95'
+            : 'color: #7bdcff; emissive: #7bdcff; emissiveIntensity: 0.35; opacity: 0.55'
+        );
+      },
+
+      startSession: function (isRetest = false) {
+        this.clearTraceDots();
+        this.session = this.createSession(isRetest);
+        this.session.phase = CALIBRATION_PHASE.YAW;
+        this.session.phaseStartedAt = performance.now();
+
+        this.showBoard();
+        this.setGuideHighlight(CALIBRATION_PHASE.YAW);
+        this.setPrompt(CONFIG.calibration.promptYaw);
+        ui.calStatus.textContent = isRetest
+          ? 'Re-test calibration running: yaw.'
+          : 'Baseline calibration running: yaw.';
+      },
+
+      finishSession: function () {
+        if (!this.session) return;
+
+        const e = this.session.extrema;
+        const result = {
+          timestamp: Date.now(),
+          signedExtrema: {
+            leftYawMax: e.leftYawMax,
+            rightYawMax: e.rightYawMax,
+            downPitchMax: e.downPitchMax,
+            upPitchMax: e.upPitchMax,
+            leftRollMax: e.leftRollMax,
+            rightRollMax: e.rightRollMax
+          },
+          rom: {
+            yawROM: e.leftYawMax + e.rightYawMax,
+            pitchROM: e.downPitchMax + e.upPitchMax,
+            rollROM: e.leftRollMax + e.rightRollMax
+          },
+          traces: {
+            yawTrace: this.session.traces.yaw,
+            pitchTrace: this.session.traces.pitch
+          },
+          warnings: [...this.session.warnings]
+        };
+
+        this.hideBoard();
+        applyCalibrationResult(result, this.session.isRetest);
+        this.session.phase = CALIBRATION_PHASE.COMPLETE;
+      },
+
+      advancePhase: function () {
+        if (!this.session) return;
+
+        if (this.session.phase === CALIBRATION_PHASE.YAW) {
+          this.session.phase = CALIBRATION_PHASE.PITCH;
+          this.session.phaseStartedAt = performance.now();
+          this.setGuideHighlight(CALIBRATION_PHASE.PITCH);
+          this.setPrompt(CONFIG.calibration.promptPitch);
+          ui.calStatus.textContent = this.session.isRetest
+            ? 'Re-test calibration running: pitch.'
+            : 'Baseline calibration running: pitch.';
+          return;
+        }
+
+        if (this.session.phase === CALIBRATION_PHASE.PITCH) {
+          this.finishSession();
+        }
+      },
+
+      updateSignedExtrema: function (yaw, pitch, roll) {
+        const e = this.session.extrema;
+
+        if (yaw < 0) e.leftYawMax = Math.max(e.leftYawMax, Math.abs(yaw));
+        else e.rightYawMax = Math.max(e.rightYawMax, yaw);
+
+        if (pitch < 0) e.downPitchMax = Math.max(e.downPitchMax, Math.abs(pitch));
+        else e.upPitchMax = Math.max(e.upPitchMax, pitch);
+
+        if (roll < 0) e.leftRollMax = Math.max(e.leftRollMax, Math.abs(roll));
+        else e.rightRollMax = Math.max(e.rightRollMax, roll);
+      },
+
+      mapAngleMagnitudeToBoardDistance: function (angleDegAbs) {
+        const inner = CONFIG.calibration.innerRadius;
+        const outer = CONFIG.calibration.outerRadius;
+        const maxR = CONFIG.calibration.maxRadius;
+
+        if (angleDegAbs <= 30) {
+          return inner * (angleDegAbs / 30);
+        }
+
+        if (angleDegAbs <= 60) {
+          return inner + (outer - inner) * ((angleDegAbs - 30) / 30);
+        }
+
+        const extra = Math.min(angleDegAbs, 90) - 60;
+        return outer + (maxR - outer) * (extra / 30);
+      },
+
+      mapSignedAngleToBoardAxis: function (angleDeg) {
+        const sign = angleDeg < 0 ? -1 : 1;
+        return sign * this.mapAngleMagnitudeToBoardDistance(Math.abs(angleDeg));
+      },
+
+      getBoardPointFromAngles: function (yawDeg, pitchDeg) {
+        return {
+          x: this.mapSignedAngleToBoardAxis(yawDeg),
+          y: this.mapSignedAngleToBoardAxis(pitchDeg)
+        };
+      },
+
+      moveCursor: function (pt) {
+        this.cursorEl.setAttribute('position', `${pt.x} ${pt.y} 0.02`);
+      },
+
+      addTraceDotIfNeeded: function (pt, phase, yaw, pitch, roll, elapsedSec) {
+        const color = phase === CALIBRATION_PHASE.YAW ? '#ffe27a' : '#7afff0';
+
+        if (this.lastTracePt) {
+          const dx = pt.x - this.lastTracePt.x;
+          const dy = pt.y - this.lastTracePt.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < CONFIG.calibration.traceSampleMinDist) return;
+        }
+
+        const dot = document.createElement('a-sphere');
+        dot.setAttribute('radius', '0.018');
+        dot.setAttribute('position', `${pt.x} ${pt.y} 0.01`);
+        dot.setAttribute('material', `color: ${color}; emissive: ${color}; emissiveIntensity: 0.85; opacity: 0.94`);
+        this.traceRoot.appendChild(dot);
+        this.traceDots.push(dot);
+
+        const sample = {
+          x: pt.x,
+          y: pt.y,
+          yaw,
+          pitch,
+          roll,
+          t: elapsedSec
+        };
+
+        if (phase === CALIBRATION_PHASE.YAW) this.session.traces.yaw.push(sample);
+        if (phase === CALIBRATION_PHASE.PITCH) this.session.traces.pitch.push(sample);
+
+        this.lastTracePt = { x: pt.x, y: pt.y };
+      },
+
+      tick: function () {
+        if (!this.session) return;
+        if (this.session.phase === CALIBRATION_PHASE.IDLE || this.session.phase === CALIBRATION_PHASE.COMPLETE) return;
+        if (!window.qNeutral || !appState.neutralCaptured) return;
+        if (!isInVrMode()) return;
+
+        const camObj = getCameraObj();
+        if (!camObj) return;
+
+        const now = performance.now();
+        const elapsedSec = (now - this.session.phaseStartedAt) / 1000;
+        const { yaw, pitch, roll } = getRelativeYPRDeg(camObj, appState.qNeutral);
+
+        this.session.currentAngles.yaw = yaw;
+        this.session.currentAngles.pitch = pitch;
+        this.session.currentAngles.roll = roll;
+
+        const pt = this.getBoardPointFromAngles(yaw, pitch);
+        this.moveCursor(pt);
+        this.updateSignedExtrema(yaw, pitch, roll);
+        this.addTraceDotIfNeeded(pt, this.session.phase, yaw, pitch, roll, elapsedSec);
+
+        if (this.session.phase === CALIBRATION_PHASE.YAW && elapsedSec >= CONFIG.calibration.yawSec) {
+          this.advancePhase();
+          return;
+        }
+
+        if (this.session.phase === CALIBRATION_PHASE.PITCH && elapsedSec >= CONFIG.calibration.pitchSec) {
+          this.advancePhase();
+        }
+      }
+    });
+
+    // ----------------------------
+    // A-Frame: pursuit target motion
+    // ----------------------------
     AFRAME.registerComponent('pursuit3axis', {
       schema: {
         mode: { type: 'string', default: 'cycle' },
         cycleOrder: { type: 'string', default: 'drift,circle,figure8,jumps' },
         cycleMinSec: { type: 'number', default: 35 },
         cycleMaxSec: { type: 'number', default: 55 },
-        yawRangeDeg:   { type: 'number', default: 25 },
+        yawRangeDeg: { type: 'number', default: 25 },
         pitchRangeDeg: { type: 'number', default: 15 },
-        rollRangeDeg:  { type: 'number', default: 10 },
-        distMin:       { type: 'number', default: 1.2 },
-        distMax:       { type: 'number', default: 2.2 },
-        speed:   { type: 'number', default: 0.20 },
+        rollRangeDeg: { type: 'number', default: 10 },
+        distMin: { type: 'number', default: 1.2 },
+        distMax: { type: 'number', default: 2.2 },
+        speed: { type: 'number', default: 0.20 },
         holdMin: { type: 'number', default: 0.45 },
         holdMax: { type: 'number', default: 1.20 },
         circlePeriodSec: { type: 'number', default: 11.0 },
-        fig8PeriodSec:   { type: 'number', default: 13.0 },
+        fig8PeriodSec: { type: 'number', default: 13.0 },
         jumpAmplitude: { type: 'number', default: 0.7 },
         arcBulge: { type: 'number', default: 0.35 }
       },
@@ -470,9 +1190,14 @@
         this.path = null;
         this.pathT = 0;
         this.pathLen = 1;
+
         this.p0 = new THREE.Vector3();
         this.p1 = new THREE.Vector3();
         this.p2 = new THREE.Vector3();
+
+        this.origin = new THREE.Vector3();
+        this.cameraEl = getCameraEl();
+
         this._t = 0;
         this._hold = 0;
         this._mode = 'drift';
@@ -481,43 +1206,51 @@
         this._cycle = this.data.cycleOrder.split(',').map(s => s.trim()).filter(Boolean);
         this._rollRad = 0;
         this._dist = 1.6;
-        this.cameraEl = document.querySelector('a-camera');
-        this.origin = new THREE.Vector3();
+
         this._resolveMode(true);
         this._snapToInitial();
       },
 
-      _rand(a,b){ return a + Math.random()*(b-a); },
-      _pickEnvelopePoint(amp = 1.0){
-        const d = this.data;
-        const yaw = deg2rad((Math.random()*2 - 1) * d.yawRangeDeg * amp);
-        const pitch = deg2rad((Math.random()*2 - 1) * d.pitchRangeDeg * amp);
-        const dist = this._rand(d.distMin, d.distMax);
-        return new THREE.Vector3(Math.tan(yaw)*dist, Math.tan(pitch)*dist, -dist);
+      _rand(a, b) {
+        return a + Math.random() * (b - a);
       },
-      _applyRollAndNeutral(v, rollRad){
+
+      _pickEnvelopePoint(amp = 1.0) {
+        const d = this.data;
+        const yaw = deg2rad((Math.random() * 2 - 1) * d.yawRangeDeg * amp);
+        const pitch = deg2rad((Math.random() * 2 - 1) * d.pitchRangeDeg * amp);
+        const dist = this._rand(d.distMin, d.distMax);
+        return new THREE.Vector3(Math.tan(yaw) * dist, Math.tan(pitch) * dist, -dist);
+      },
+
+      _applyRollAndNeutral(v, rollRad) {
         const m = new THREE.Matrix4().makeRotationZ(rollRad);
         v.applyMatrix4(m);
         if (window.qNeutral) v.applyQuaternion(window.qNeutral);
         return v;
       },
-      _getHeadWorldPosition(){
+
+      _getHeadWorldPosition() {
         if (this.cameraEl) this.cameraEl.object3D.getWorldPosition(this.origin);
-        else this.origin.set(0,0,0);
+        else this.origin.set(0, 0, 0);
         return this.origin;
       },
-      _placeStar(){
+
+      _placeStar() {
         const head = this._getHeadWorldPosition();
         this.el.object3D.position.copy(head).add(this.cur);
       },
-      _newRollAndDist(){
+
+      _newRollAndDist() {
         const d = this.data;
-        this._rollRad = deg2rad((Math.random()*2 - 1) * d.rollRangeDeg);
+        this._rollRad = deg2rad((Math.random() * 2 - 1) * d.rollRangeDeg);
         this._dist = this._rand(d.distMin, d.distMax);
       },
-      _resolveMode(forceReset){
+
+      _resolveMode(forceReset) {
         const d = this.data;
         const requested = (d.mode || 'cycle').toLowerCase();
+
         if (requested === 'cycle') {
           if (forceReset || !this._cycleLeft || !this._cycle.length) {
             this._cycleIdx = this._cycleIdx % this._cycle.length;
@@ -533,87 +1266,126 @@
           }
         }
       },
-      _advanceCycleIfNeeded(dt){
+
+      _advanceCycleIfNeeded(dt) {
         const d = this.data;
         if ((d.mode || 'cycle').toLowerCase() !== 'cycle') return;
+
         this._cycleLeft -= dt;
+
         if (this._cycleLeft <= 0) {
           this._cycleIdx = (this._cycleIdx + 1) % this._cycle.length;
           this._mode = this._cycle[this._cycleIdx] || 'drift';
           this._cycleLeft = this._rand(d.cycleMinSec, d.cycleMaxSec);
-          this._t = 0; this._hold = 0;
+          this._t = 0;
+          this._hold = 0;
           this._newRollAndDist();
           this._pickNewDest(true);
         }
       },
-      _buildArcTo(next){
+
+      _buildArcTo(next) {
         const d = this.data;
+
         this.p0.copy(this.cur);
         this.p1.copy(next);
+
         const mid = this.p0.clone().add(this.p1).multiplyScalar(0.5);
         const segLen = this.p1.clone().sub(this.p0).length();
-        const up = new THREE.Vector3(0,1,0);
+
+        const up = new THREE.Vector3(0, 1, 0);
         const dir = this.p1.clone().sub(this.p0).normalize();
         let perp = new THREE.Vector3().crossVectors(dir, up);
-        if (perp.lengthSq() < 1e-6) perp = new THREE.Vector3(1,0,0);
+
+        if (perp.lengthSq() < 1e-6) perp = new THREE.Vector3(1, 0, 0);
+
         perp.normalize().multiplyScalar(segLen * clamp(d.arcBulge, 0.05, 0.9));
         this.p2.copy(mid).add(perp);
+
         this.path = new THREE.CatmullRomCurve3([this.p0, this.p2, this.p1]);
         this.pathT = 0;
         this.pathLen = Math.max(0.001, this.path.getLength());
       },
-      _pickNewDest(snap){
+
+      _pickNewDest(snap) {
         const d = this.data;
         const amp = (this._mode === 'jumps') ? d.jumpAmplitude : 1.0;
-        this._rollRad = deg2rad((Math.random()*2 - 1) * d.rollRangeDeg);
+
+        this._rollRad = deg2rad((Math.random() * 2 - 1) * d.rollRangeDeg);
+
         const next = this._applyRollAndNeutral(this._pickEnvelopePoint(amp), this._rollRad);
         this.dest.copy(next);
         this._hold = this._rand(d.holdMin, d.holdMax);
+
         if (snap) {
           this.cur.copy(this.dest);
           this._placeStar();
+
           const next2 = this._applyRollAndNeutral(this._pickEnvelopePoint(amp), this._rollRad);
           this.dest.copy(next2);
         }
+
         this._buildArcTo(this.dest);
       },
-      _snapToInitial(){
-        this._t = 0; this._hold = 0; this._newRollAndDist();
-        this.cur.copy(this._applyRollAndNeutral(new THREE.Vector3(0,0,-this._dist), 0));
+
+      _snapToInitial() {
+        this._t = 0;
+        this._hold = 0;
+        this._newRollAndDist();
+
+        this.cur.copy(this._applyRollAndNeutral(new THREE.Vector3(0, 0, -this._dist), 0));
         this._placeStar();
         this._pickNewDest(false);
       },
-      tick: function(time, timeDelta) {
+
+      tick: function (time, timeDelta) {
         if (!window.trainingActive || window.trainingMode !== 'pursuit') return;
+
         const d = this.data;
         const dt = Math.min(timeDelta / 1000, 0.05);
+
         this._resolveMode(false);
         this._advanceCycleIfNeeded(dt);
         this._t += dt;
 
         if (this._mode === 'circle') {
           const period = Math.max(4.0, d.circlePeriodSec);
-          const w = (2*Math.PI)/period;
-          const rx = Math.tan(deg2rad(d.yawRangeDeg))*this._dist;
-          const ry = Math.tan(deg2rad(d.pitchRangeDeg))*this._dist;
+          const w = (2 * Math.PI) / period;
+          const rx = Math.tan(deg2rad(d.yawRangeDeg)) * this._dist;
+          const ry = Math.tan(deg2rad(d.pitchRangeDeg)) * this._dist;
           const a = w * this._t;
-          this.cur.copy(this._applyRollAndNeutral(new THREE.Vector3(rx*Math.cos(a), ry*Math.sin(a), -this._dist), this._rollRad));
+
+          this.cur.copy(
+            this._applyRollAndNeutral(
+              new THREE.Vector3(rx * Math.cos(a), ry * Math.sin(a), -this._dist),
+              this._rollRad
+            )
+          );
+
           this._placeStar();
           return;
         }
 
         if (this._mode === 'figure8') {
           const period = Math.max(5.0, d.fig8PeriodSec);
-          const w = (2*Math.PI)/period;
-          const rx = Math.tan(deg2rad(d.yawRangeDeg))*this._dist;
-          const ry = Math.tan(deg2rad(d.pitchRangeDeg))*this._dist;
+          const w = (2 * Math.PI) / period;
+          const rx = Math.tan(deg2rad(d.yawRangeDeg)) * this._dist;
+          const ry = Math.tan(deg2rad(d.pitchRangeDeg)) * this._dist;
           const a = w * this._t;
-          this.cur.copy(this._applyRollAndNeutral(new THREE.Vector3(rx*Math.sin(a), ry*0.5*Math.sin(2*a), -this._dist), this._rollRad));
+
+          this.cur.copy(
+            this._applyRollAndNeutral(
+              new THREE.Vector3(rx * Math.sin(a), ry * 0.5 * Math.sin(2 * a), -this._dist),
+              this._rollRad
+            )
+          );
+
           this._placeStar();
           return;
         }
 
         if (!this.path) this._pickNewDest(false);
+
         if (this.pathT >= 1.0) {
           this._hold -= dt;
           if (this._hold <= 0) this._pickNewDest(false);
@@ -628,10 +1400,14 @@
       }
     });
 
+    // ----------------------------
+    // A-Frame: coral tracing controller
+    // ----------------------------
     AFRAME.registerComponent('curve-trace-controller', {
       init: function () {
-        this.cameraEl = document.querySelector('a-camera');
+        this.cameraEl = getCameraEl();
         this.sceneElRef = this.el.sceneEl;
+
         this.hudEl = document.querySelector('#traceHud');
         this.centerEl = document.querySelector('#traceCenter');
         this.startEl = document.querySelector('#traceStart');
@@ -639,25 +1415,15 @@
         this.coralEl = document.querySelector('#centralCoral');
         this.holdTimerEl = document.querySelector('#holdTimerText');
 
+        this.traceCfg = CONFIG.trace;
+
         this.curveLine = null;
         this.corridorPoints = [];
         this.curveLocal = [];
 
-        this.coralBaseLocal = new THREE.Vector3(0, 0, -8.0);
-        this.finishLocal = new THREE.Vector3(0, 0.04, -8.0);
-        this.centerDistance = 8.0;
-
-        this.state = 'idle';
-        this.trialIndex = -1;
-        this.startHoldTime = 0;
-        this.endHoldTime = 0;
-        this.accuracySamples = [];
-        this.ballProgress = 0;
-        this.finishReached = false;
-        this.sessionScores = [];
-        this.currentTrialMeta = null;
-        this.waitingForExitPress = false;
-        this.failFlashTimer = 0;
+        this.coralBaseLocal = new THREE.Vector3(0, 0, -this.traceCfg.centerDistance);
+        this.finishLocal = new THREE.Vector3(0, 0.04, -this.traceCfg.centerDistance);
+        this.centerDistance = this.traceCfg.centerDistance;
 
         this.sessionOriginWorld = new THREE.Vector3();
 
@@ -666,12 +1432,24 @@
         this.anchorIslandEls = [];
         this.currentAnchorIndex = -1;
 
+        this.state = 'idle';
+        this.trialIndex = -1;
+        this.startHoldTime = 0;
+        this.endHoldTime = 0;
+        this.accuracySamples = [];
+        this.ballProgress = 0;
+        this.finishReached = false;
+        this.sessionScores = [];
+        this.currentTrialMeta = null;
+        this.waitingForExitPress = false;
+        this.failFlashTimer = 0;
+
         this._introTimer = null;
         this._trialAdvanceTimer = null;
         this._onSelect = this._onSelect.bind(this);
       },
 
-      resetSession: function() {
+      resetSession: function () {
         this.state = 'idle';
         this.trialIndex = -1;
         this.startHoldTime = 0;
@@ -687,8 +1465,15 @@
         this.startAnchors = [];
         this.anchorOrder = [];
 
-        if (this._introTimer) { clearTimeout(this._introTimer); this._introTimer = null; }
-        if (this._trialAdvanceTimer) { clearTimeout(this._trialAdvanceTimer); this._trialAdvanceTimer = null; }
+        if (this._introTimer) {
+          clearTimeout(this._introTimer);
+          this._introTimer = null;
+        }
+
+        if (this._trialAdvanceTimer) {
+          clearTimeout(this._trialAdvanceTimer);
+          this._trialAdvanceTimer = null;
+        }
 
         this._clearCurveVisuals();
         this._clearAnchorIslands();
@@ -696,35 +1481,37 @@
         this._detachControllerListeners();
 
         this.coralEl.setAttribute('position', '0 0 -8');
+
         const coralComp = this.coralEl.components['coral-growth'];
         if (coralComp) coralComp.resetGrowth();
       },
 
-      _attachControllerListeners: function() {
+      _attachControllerListeners: function () {
         this.sceneElRef.addEventListener('triggerdown', this._onSelect);
         this.sceneElRef.addEventListener('abuttondown', this._onSelect);
         this.sceneElRef.addEventListener('xbuttondown', this._onSelect);
       },
 
-      _detachControllerListeners: function() {
+      _detachControllerListeners: function () {
         this.sceneElRef.removeEventListener('triggerdown', this._onSelect);
         this.sceneElRef.removeEventListener('abuttondown', this._onSelect);
         this.sceneElRef.removeEventListener('xbuttondown', this._onSelect);
       },
 
-      _onSelect: function() {
+      _onSelect: function () {
         if (this.waitingForExitPress) {
           this.waitingForExitPress = false;
           endTraining('modeComplete');
         }
       },
 
-      startSession: function() {
+      startSession: function () {
         this.resetSession();
-        const rom = window.baselineROM;
+
+        const rom = appState.baseline;
         if (!rom || !window.qNeutral) return;
 
-        this.centerDistance = 8.0;
+        this.centerDistance = this.traceCfg.centerDistance;
         this.coralBaseLocal.set(0, 0, -this.centerDistance);
 
         this.cameraEl.object3D.getWorldPosition(this.sessionOriginWorld);
@@ -736,8 +1523,8 @@
         const pitchHalf = (rom.pitchROM / 2) * 0.95;
 
         this.startAnchors = this._generateStartAnchors(yawHalf, pitchHalf);
-        const order = this._makeAnchorOrder(this.startAnchors.length);
-        this.anchorOrder = order.slice(0, 10);
+        this.anchorOrder = this._makeAnchorOrder(this.startAnchors.length).slice(0, this.traceCfg.anchorCountPerSession);
+
         this._createAnchorIslands();
 
         this.state = 'intro';
@@ -749,24 +1536,27 @@
             this.hudEl.setAttribute('visible', 'false');
             this._nextTrial();
           }
-        }, 2600);
+        }, this.traceCfg.introMs);
       },
 
-      endSession: function() {
-        const avg = this.sessionScores.length ? (this.sessionScores.reduce((a,b)=>a+b,0)/this.sessionScores.length) : 0;
+      endSession: function () {
+        const avg = this.sessionScores.length
+          ? (this.sessionScores.reduce((a, b) => a + b, 0) / this.sessionScores.length)
+          : 0;
+
         const best = this.sessionScores.length ? Math.max(...this.sessionScores) : 0;
         const worst = this.sessionScores.length ? Math.min(...this.sessionScores) : 0;
 
         this.waitingForExitPress = true;
         this._attachControllerListeners();
-        this._showHud(
-          `Coral complete\nAvg ${avg.toFixed(1)}%  Best ${best.toFixed(1)}%  Worst ${worst.toFixed(1)}%\n\nPress trigger to return`
-        );
+        this._showHud(`Coral complete\nAvg ${avg.toFixed(1)}%  Best ${best.toFixed(1)}%  Worst ${worst.toFixed(1)}%\n\nPress trigger to return`);
         this._hideHoldTimer();
-        calStatus.textContent = `Coral tracing complete. Avg ${avg.toFixed(1)}%, best ${best.toFixed(1)}%, worst ${worst.toFixed(1)}%. Press trigger to return.`;
+
+        ui.calStatus.textContent =
+          `Coral tracing complete. Avg ${avg.toFixed(1)}%, best ${best.toFixed(1)}%, worst ${worst.toFixed(1)}%. Press trigger to return.`;
       },
 
-      _generateStartAnchors: function(yawHalf, pitchHalf) {
+      _generateStartAnchors: function (yawHalf, pitchHalf) {
         const minYaw = 18;
         const minPitch = 18;
 
@@ -787,21 +1577,18 @@
         ];
 
         const anchors = [];
-
         const quadrants = [
-          { sx: -1, sy:  1, zone: 'leftAbove' },
+          { sx: -1, sy: 1, zone: 'leftAbove' },
           { sx: -1, sy: -1, zone: 'leftBelow' },
-          { sx:  1, sy:  1, zone: 'rightAbove' },
-          { sx:  1, sy: -1, zone: 'rightBelow' }
+          { sx: 1, sy: 1, zone: 'rightAbove' },
+          { sx: 1, sy: -1, zone: 'rightBelow' }
         ];
 
         quadrants.forEach((q, qi) => {
           for (let i = 0; i < 5; i++) {
-            const yaw = q.sx * yawBands[i];
-            const pitch = q.sy * pitchBands[(i + qi) % pitchBands.length];
             anchors.push({
-              yawDeg: yaw,
-              pitchDeg: pitch,
+              yawDeg: q.sx * yawBands[i],
+              pitchDeg: q.sy * pitchBands[(i + qi) % pitchBands.length],
               zone: q.zone
             });
           }
@@ -810,19 +1597,21 @@
         return anchors;
       },
 
-      _makeAnchorOrder: function(count) {
+      _makeAnchorOrder: function (count) {
         const arr = Array.from({ length: count }, (_, i) => i);
+
         for (let i = arr.length - 1; i > 0; i--) {
           const j = Math.floor(Math.random() * (i + 1));
           [arr[i], arr[j]] = [arr[j], arr[i]];
         }
+
         return arr;
       },
 
-      _createAnchorIslands: function() {
+      _createAnchorIslands: function () {
         this._clearAnchorIslands();
 
-        this.startAnchors.forEach((anchor) => {
+        this.startAnchors.forEach(anchor => {
           const local = this._localFromAngles(anchor.yawDeg, anchor.pitchDeg, this.centerDistance);
           const world = this._localToWorld(local);
 
@@ -833,21 +1622,22 @@
           island.setAttribute('position', `${world.x} ${world.y} ${world.z}`);
           island.setAttribute('rotation', '90 0 0');
           island.setAttribute('material', 'color: #6f8fb8; emissive: #6f8fb8; emissiveIntensity: 0.18; opacity: 0.92');
-          this.el.sceneEl.appendChild(island);
 
+          this.el.sceneEl.appendChild(island);
           this.anchorIslandEls.push(island);
         });
       },
 
-      _clearAnchorIslands: function() {
+      _clearAnchorIslands: function () {
         this.anchorIslandEls.forEach(el => el.parentNode && el.parentNode.removeChild(el));
         this.anchorIslandEls = [];
       },
 
-      _highlightActiveAnchor: function(activeIdx) {
+      _highlightActiveAnchor: function (activeIdx) {
         this.anchorIslandEls.forEach((el, i) => {
           const active = i === activeIdx;
-          el.setAttribute('material',
+          el.setAttribute(
+            'material',
             active
               ? 'color: #ffd27a; emissive: #ffd27a; emissiveIntensity: 0.95; opacity: 0.98'
               : 'color: #6f8fb8; emissive: #6f8fb8; emissiveIntensity: 0.18; opacity: 0.92'
@@ -855,20 +1645,20 @@
         });
       },
 
-      _localFromAngles: function(yawDeg, pitchDeg, dist) {
+      _localFromAngles: function (yawDeg, pitchDeg, dist) {
         const yaw = deg2rad(yawDeg);
         const pitch = deg2rad(pitchDeg);
         return new THREE.Vector3(Math.tan(yaw) * dist, Math.tan(pitch) * dist, -dist);
       },
 
-      _localToWorld: function(localVec) {
+      _localToWorld: function (localVec) {
         const world = localVec.clone();
         if (window.qNeutral) world.applyQuaternion(window.qNeutral);
         world.add(this.sessionOriginWorld);
         return world;
       },
 
-      _gazeAngleToLocalTarget: function(localTarget) {
+      _gazeAngleToLocalTarget: function (localTarget) {
         const targetWorld = this._localToWorld(localTarget);
         const headWorld = new THREE.Vector3();
         this.cameraEl.object3D.getWorldPosition(headWorld);
@@ -878,24 +1668,30 @@
           .normalize();
 
         const toTarget = targetWorld.clone().sub(headWorld).normalize();
-
         const dot = clamp(gazeDir.dot(toTarget), -1, 1);
+
         return rad2deg(Math.acos(dot));
       },
 
-      _getViewPointOnPlane: function() {
+      _getViewPointOnPlane: function () {
         if (!window.qNeutral || !this.cameraEl) return null;
-        const fwdWorld = new THREE.Vector3(0, 0, -1).applyQuaternion(this.cameraEl.object3D.quaternion).normalize();
+
+        const fwdWorld = new THREE.Vector3(0, 0, -1)
+          .applyQuaternion(this.cameraEl.object3D.quaternion)
+          .normalize();
+
         const fwdLocal = fwdWorld.clone().applyQuaternion(window.qNeutral.clone().invert());
 
         if (Math.abs(fwdLocal.z) < 1e-4 || fwdLocal.z >= -1e-4) return null;
+
         const t = (-this.centerDistance) / fwdLocal.z;
         if (t <= 0) return null;
+
         return fwdLocal.multiplyScalar(t);
       },
 
-      _buildCurveLocal: function(startLocal, finishLocal) {
-        const n = 120;
+      _buildCurveLocal: function (startLocal, finishLocal) {
+        const n = this.traceCfg.curveSamples;
         const curve = [];
 
         const x0 = startLocal.x;
@@ -936,120 +1732,24 @@
         return curve;
       },
 
-      _drawCurveAndCorridor: function(curveLocal, active=false) {
-        this._clearCurveVisuals();
-
-        const lineColor = active ? '#45ffd7' : '#7cb8ff';
-        const positions = [];
-        for (const p of curveLocal) {
-          const w = this._localToWorld(p);
-          positions.push(w.x, w.y, w.z);
-        }
-
-        const geom = new THREE.BufferGeometry();
-        geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-        const mat = new THREE.LineBasicMaterial({ color: lineColor, transparent:true, opacity:0.85 });
-        this.curveLine = new THREE.Line(geom, mat);
-        this.el.sceneEl.object3D.add(this.curveLine);
-
-        for (let i = 0; i < curveLocal.length; i += 2) {
-          const sphere = document.createElement('a-sphere');
-          sphere.setAttribute('radius', '0.13');
-          sphere.setAttribute('segments-width', '10');
-          sphere.setAttribute('segments-height', '8');
-          sphere.setAttribute('class', 'corridorDot');
-          const wp = this._localToWorld(curveLocal[i]);
-          sphere.setAttribute('position', `${wp.x} ${wp.y} ${wp.z}`);
-          sphere.setAttribute('material', `color: ${active ? '#45ffd7' : '#88bbff'}; opacity: 0.07; transparent: true; emissive: ${active ? '#45ffd7' : '#88bbff'}; emissiveIntensity: 0.18`);
-          this.el.sceneEl.appendChild(sphere);
-          this.corridorPoints.push(sphere);
-        }
-      },
-
-      _updateCorridorAppearance: function() {
-        const total = this.corridorPoints.length;
-        if (!total) return;
-
-        const litIndex = Math.floor((this.ballProgress || 0) * total);
-        this.corridorPoints.forEach((el, i) => {
-          const ahead = i >= litIndex;
-          const nearBall = Math.abs(i - litIndex) < 5;
-          const opacity = ahead ? (nearBall ? 0.30 : 0.19) : 0.04;
-          const emissiveIntensity = ahead ? (nearBall ? 0.72 : 0.30) : 0.08;
-          el.setAttribute('material',
-            `color: #45ffd7; opacity: ${opacity}; transparent: true; emissive: #45ffd7; emissiveIntensity: ${emissiveIntensity}`);
-        });
-      },
-
-      _clearCurveVisuals: function() {
-        if (this.curveLine) {
-          this.el.sceneEl.object3D.remove(this.curveLine);
-          this.curveLine.geometry.dispose();
-          this.curveLine.material.dispose();
-          this.curveLine = null;
-        }
-        this.corridorPoints.forEach(el => el.parentNode && el.parentNode.removeChild(el));
-        this.corridorPoints = [];
-      },
-
-      _showHud: function(text) {
-        this.hudEl.setAttribute('visible', 'true');
-        this.hudEl.setAttribute('text', {
-          value: text,
-          align: 'center',
-          width: 2.1,
-          color: '#FFFFFF',
-          wrapCount: 30
-        });
-      },
-
-      _hideAll: function() {
-        this.hudEl.setAttribute('visible', 'false');
-        this.centerEl.setAttribute('visible', 'false');
-        this.startEl.setAttribute('visible', 'false');
-        this.ballEl.setAttribute('visible', 'false');
-        this._hideHoldTimer();
-      },
-
-      _showHoldTimerAtLocal: function(localTarget, secondsRemaining, label) {
-        const world = this._localToWorld(localTarget);
-        this.holdTimerEl.setAttribute('visible', 'true');
-        this.holdTimerEl.setAttribute('position', `${world.x} ${world.y + 0.16} ${world.z}`);
-        this.holdTimerEl.object3D.lookAt(this.cameraEl.object3D.getWorldPosition(new THREE.Vector3()));
-        this.holdTimerEl.setAttribute('text', {
-          value: `${label}\n${secondsRemaining.toFixed(1)} s`,
-          align: 'center',
-          width: 1.25,
-          color: '#FFFFFF',
-          wrapCount: 14
-        });
-      },
-
-      _hideHoldTimer: function() {
-        this.holdTimerEl.setAttribute('visible', 'false');
-      },
-
-      _placeBallAtProgress: function(p) {
-        const idxFloat = clamp(p, 0, 1) * (this.curveLocal.length - 1);
+      _curvePointAtProgress: function (progress) {
+        const idxFloat = clamp(progress, 0, 1) * (this.curveLocal.length - 1);
         const idx0 = Math.floor(idxFloat);
         const idx1 = Math.min(this.curveLocal.length - 1, idx0 + 1);
         const t = idxFloat - idx0;
-        const local = this.curveLocal[idx0].clone().lerp(this.curveLocal[idx1], t);
-        const world = this._localToWorld(local);
-        this.ballEl.setAttribute('position', `${world.x} ${world.y} ${world.z}`);
+        return this.curveLocal[idx0].clone().lerp(this.curveLocal[idx1], t);
       },
 
-      _setBallNormal: function() {
-        this.ballEl.setAttribute('material', 'color: #fff8d6; emissive: #fff8d6; emissiveIntensity: 0.95; opacity: 0.98');
+      _distanceLocal2D: function (a, b) {
+        const dx = a.x - b.x;
+        const dy = a.y - b.y;
+        return Math.sqrt(dx * dx + dy * dy);
       },
 
-      _setBallFail: function() {
-        this.ballEl.setAttribute('material', 'color: #ff6666; emissive: #ff6666; emissiveIntensity: 0.95; opacity: 0.98');
-      },
-
-      _nextTrial: function() {
+      _nextTrial: function () {
         this.trialIndex += 1;
-        if (this.trialIndex >= 10) {
+
+        if (this.trialIndex >= this.traceCfg.anchorCountPerSession) {
           this.state = 'sessionComplete';
           this.endSession();
           return;
@@ -1067,12 +1767,16 @@
         this.finishReached = false;
         this.failFlashTimer = 0;
 
-        const startLocal = this._localFromAngles(this.currentTrialMeta.yawDeg, this.currentTrialMeta.pitchDeg, this.centerDistance);
-        this.startLocal = startLocal.clone();
+        this.startLocal = this._localFromAngles(
+          this.currentTrialMeta.yawDeg,
+          this.currentTrialMeta.pitchDeg,
+          this.centerDistance
+        );
 
         const side = this.currentTrialMeta.yawDeg < 0 ? -1 : 1;
-        const finishOffsetX = 0.42;
-        this.finishLocal = this.coralBaseLocal.clone().add(new THREE.Vector3(side * finishOffsetX, 0.04, 0));
+        this.finishLocal = this.coralBaseLocal.clone().add(
+          new THREE.Vector3(side * this.traceCfg.finishOffsetX, 0.04, 0)
+        );
 
         this.curveLocal = this._buildCurveLocal(this.startLocal, this.finishLocal);
 
@@ -1101,46 +1805,145 @@
         this.state = 'acquireStart';
       },
 
-      _curvePointAtProgress: function(progress) {
-        const idxFloat = clamp(progress, 0, 1) * (this.curveLocal.length - 1);
+      _drawCurveAndCorridor: function (curveLocal, active = false) {
+        this._clearCurveVisuals();
+
+        const lineColor = active ? '#45ffd7' : '#7cb8ff';
+        const positions = [];
+
+        for (const p of curveLocal) {
+          const w = this._localToWorld(p);
+          positions.push(w.x, w.y, w.z);
+        }
+
+        const geom = new THREE.BufferGeometry();
+        geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+
+        const mat = new THREE.LineBasicMaterial({
+          color: lineColor,
+          transparent: true,
+          opacity: 0.85
+        });
+
+        this.curveLine = new THREE.Line(geom, mat);
+        this.el.sceneEl.object3D.add(this.curveLine);
+
+        for (let i = 0; i < curveLocal.length; i += this.traceCfg.corridorDotStep) {
+          const sphere = document.createElement('a-sphere');
+          sphere.setAttribute('radius', String(this.traceCfg.corridorDotRadius));
+          sphere.setAttribute('segments-width', '10');
+          sphere.setAttribute('segments-height', '8');
+          sphere.setAttribute('class', 'corridorDot');
+
+          const wp = this._localToWorld(curveLocal[i]);
+          sphere.setAttribute('position', `${wp.x} ${wp.y} ${wp.z}`);
+          sphere.setAttribute(
+            'material',
+            `color: ${active ? '#45ffd7' : '#88bbff'}; opacity: 0.07; transparent: true; emissive: ${active ? '#45ffd7' : '#88bbff'}; emissiveIntensity: 0.18`
+          );
+
+          this.el.sceneEl.appendChild(sphere);
+          this.corridorPoints.push(sphere);
+        }
+      },
+
+      _updateCorridorAppearance: function () {
+        const total = this.corridorPoints.length;
+        if (!total) return;
+
+        const litIndex = Math.floor((this.ballProgress || 0) * total);
+
+        this.corridorPoints.forEach((el, i) => {
+          const ahead = i >= litIndex;
+          const nearBall = Math.abs(i - litIndex) < this.traceCfg.corridorLightWindow;
+          const opacity = ahead ? (nearBall ? 0.30 : 0.19) : 0.04;
+          const emissiveIntensity = ahead ? (nearBall ? 0.72 : 0.30) : 0.08;
+
+          el.setAttribute(
+            'material',
+            `color: #45ffd7; opacity: ${opacity}; transparent: true; emissive: #45ffd7; emissiveIntensity: ${emissiveIntensity}`
+          );
+        });
+      },
+
+      _clearCurveVisuals: function () {
+        if (this.curveLine) {
+          this.el.sceneEl.object3D.remove(this.curveLine);
+          this.curveLine.geometry.dispose();
+          this.curveLine.material.dispose();
+          this.curveLine = null;
+        }
+
+        this.corridorPoints.forEach(el => el.parentNode && el.parentNode.removeChild(el));
+        this.corridorPoints = [];
+      },
+
+      _showHud: function (text) {
+        this.hudEl.setAttribute('visible', 'true');
+        this.hudEl.setAttribute('text', {
+          value: text,
+          align: 'center',
+          width: 2.1,
+          color: '#FFFFFF',
+          wrapCount: 30
+        });
+      },
+
+      _hideAll: function () {
+        this.hudEl.setAttribute('visible', 'false');
+        this.centerEl.setAttribute('visible', 'false');
+        this.startEl.setAttribute('visible', 'false');
+        this.ballEl.setAttribute('visible', 'false');
+        this._hideHoldTimer();
+      },
+
+      _showHoldTimerAtLocal: function (localTarget, secondsRemaining, label) {
+        const world = this._localToWorld(localTarget);
+        this.holdTimerEl.setAttribute('visible', 'true');
+        this.holdTimerEl.setAttribute('position', `${world.x} ${world.y + this.traceCfg.holdTimerYOffset} ${world.z}`);
+        this.holdTimerEl.object3D.lookAt(this.cameraEl.object3D.getWorldPosition(new THREE.Vector3()));
+        this.holdTimerEl.setAttribute('text', {
+          value: `${label}\n${secondsRemaining.toFixed(1)} s`,
+          align: 'center',
+          width: 1.25,
+          color: '#FFFFFF',
+          wrapCount: 14
+        });
+      },
+
+      _hideHoldTimer: function () {
+        this.holdTimerEl.setAttribute('visible', 'false');
+      },
+
+      _placeBallAtProgress: function (p) {
+        const idxFloat = clamp(p, 0, 1) * (this.curveLocal.length - 1);
         const idx0 = Math.floor(idxFloat);
         const idx1 = Math.min(this.curveLocal.length - 1, idx0 + 1);
         const t = idxFloat - idx0;
-        return this.curveLocal[idx0].clone().lerp(this.curveLocal[idx1], t);
+
+        const local = this.curveLocal[idx0].clone().lerp(this.curveLocal[idx1], t);
+        const world = this._localToWorld(local);
+        this.ballEl.setAttribute('position', `${world.x} ${world.y} ${world.z}`);
       },
 
-      _distanceLocal2D: function(a, b) {
-        const dx = a.x - b.x;
-        const dy = a.y - b.y;
-        return Math.sqrt(dx*dx + dy*dy);
+      _setBallNormal: function () {
+        this.ballEl.setAttribute('material', 'color: #fff8d6; emissive: #fff8d6; emissiveIntensity: 0.95; opacity: 0.98');
       },
 
-      _computeTrialScore: function() {
-        const meanAcc = this.accuracySamples.length
-          ? this.accuracySamples.reduce((a,b)=>a+b,0) / this.accuracySamples.length
-          : 0;
-
-        const S_acc = 100 * meanAcc;
-        const S_cov = 100 * this.ballProgress;
-        const S_end = this.finishReached ? 100 : 0;
-        return clamp(0.65*S_acc + 0.25*S_cov + 0.10*S_end, 0, 100);
+      _setBallFail: function () {
+        this.ballEl.setAttribute('material', 'color: #ff6666; emissive: #ff6666; emissiveIntensity: 0.95; opacity: 0.98');
       },
 
-      tick: function(time, timeDelta) {
+      tick: function (time, timeDelta) {
         if (!window.trainingActive || window.trainingMode !== 'curveTrace') return;
         if (!this.cameraEl || !window.qNeutral || !window.baselineROM) return;
         if (this.waitingForExitPress) return;
         if (this.state === 'intro' || this.state === 'idle' || this.state === 'sessionComplete') return;
 
-        const p = this._getViewPointOnPlane();
-        if (!p) return;
+        const viewPointLocal = this._getViewPointOnPlane();
+        if (!viewPointLocal) return;
 
         const dt = Math.min(timeDelta / 1000, 0.05);
-        const ballTol = 0.30;
-        const forwardRate = 0.19;
-        const rollbackRate = 0.045;
-        const startAngleTolDeg = 4.5;
-        const finishAngleTolDeg = 9.5;
 
         if (this.failFlashTimer > 0) {
           this.failFlashTimer -= dt;
@@ -1149,7 +1952,7 @@
 
         if (this.state === 'acquireStart') {
           const ang = this._gazeAngleToLocalTarget(this.startLocal);
-          if (ang <= startAngleTolDeg) {
+          if (ang <= this.traceCfg.startAngleTolDeg) {
             this.startHoldTime = 0;
             this.state = 'holdStart';
           }
@@ -1158,7 +1961,8 @@
 
         if (this.state === 'holdStart') {
           const ang = this._gazeAngleToLocalTarget(this.startLocal);
-          if (ang > startAngleTolDeg) {
+
+          if (ang > this.traceCfg.startAngleTolDeg) {
             this.startHoldTime = 0;
             this.state = 'acquireStart';
             this._hideHoldTimer();
@@ -1166,36 +1970,37 @@
           }
 
           this.startHoldTime += dt;
-          const remain = Math.max(0, 5.0 - this.startHoldTime);
+          const remain = Math.max(0, this.traceCfg.holdSeconds - this.startHoldTime);
           this._showHoldTimerAtLocal(this.startLocal, remain, 'Hold');
 
-          if (this.startHoldTime >= 5.0) {
+          if (this.startHoldTime >= this.traceCfg.holdSeconds) {
             this.endHoldTime = 0;
             this.accuracySamples = [];
             this._drawCurveAndCorridor(this.curveLocal, true);
-            this.ballProgress = 0.02;
+            this.ballProgress = this.traceCfg.startBallInitialProgress;
             this._placeBallAtProgress(this.ballProgress);
             this._updateCorridorAppearance();
             this._hideHoldTimer();
             this.state = 'traceActive';
           }
+
           return;
         }
 
         if (this.state === 'traceActive') {
           const ballLocal = this._curvePointAtProgress(this.ballProgress);
-          const dToBall = this._distanceLocal2D(p, ballLocal);
-          const within = dToBall <= ballTol;
+          const dToBall = this._distanceLocal2D(viewPointLocal, ballLocal);
+          const within = dToBall <= this.traceCfg.ballTolerance;
 
           if (within) {
-            this.ballProgress = clamp(this.ballProgress + forwardRate * dt, 0, 1);
-            const norm = clamp(dToBall / ballTol, 0, 1);
+            this.ballProgress = clamp(this.ballProgress + this.traceCfg.forwardRate * dt, 0, 1);
+            const norm = clamp(dToBall / this.traceCfg.ballTolerance, 0, 1);
             const acc = 1 - Math.pow(norm, 1.4);
             this.accuracySamples.push(acc);
             this._setBallNormal();
           } else {
-            this.ballProgress = clamp(this.ballProgress - rollbackRate * dt, 0, 1);
-            this.failFlashTimer = 0.16;
+            this.ballProgress = clamp(this.ballProgress - this.traceCfg.rollbackRate * dt, 0, 1);
+            this.failFlashTimer = this.traceCfg.failFlashSec;
             this._setBallFail();
           }
 
@@ -1206,12 +2011,14 @@
             this.state = 'holdFinish';
             this.endHoldTime = 0;
           }
+
           return;
         }
 
         if (this.state === 'holdFinish') {
           const ang = this._gazeAngleToLocalTarget(this.finishLocal);
-          if (ang > finishAngleTolDeg) {
+
+          if (ang > this.traceCfg.finishAngleTolDeg) {
             this.endHoldTime = 0;
             this.state = 'traceActive';
             this._hideHoldTimer();
@@ -1219,12 +2026,24 @@
           }
 
           this.endHoldTime += dt;
-          const remain = Math.max(0, 5.0 - this.endHoldTime);
+          const remain = Math.max(0, this.traceCfg.holdSeconds - this.endHoldTime);
           this._showHoldTimerAtLocal(this.finishLocal, remain, 'Feed');
 
-          if (this.endHoldTime >= 5.0) {
+          if (this.endHoldTime >= this.traceCfg.holdSeconds) {
             this.finishReached = true;
-            const score = this._computeTrialScore();
+
+            const meanAcc = this.accuracySamples.length
+              ? this.accuracySamples.reduce((a, b) => a + b, 0) / this.accuracySamples.length
+              : 0;
+
+            const score = clamp(
+              this.traceCfg.scoreAccWeight * (100 * meanAcc) +
+              this.traceCfg.scoreCoverageWeight * (100 * this.ballProgress) +
+              this.traceCfg.scoreEndWeight * 100,
+              0,
+              100
+            );
+
             this.sessionScores.push(score);
 
             const coralComp = this.coralEl.components['coral-growth'];
@@ -1238,166 +2057,68 @@
               if (window.trainingActive && window.trainingMode === 'curveTrace' && !this.waitingForExitPress) {
                 this._nextTrial();
               }
-            }, 900);
+            }, this.traceCfg.advanceMs);
           }
         }
       }
     });
 
-    function applyPursuitSettingsFromBaseline() {
-      if (!baseline) return;
-      const pct = parseFloat(trainPct.value) / 100;
-      const yawRangeDeg = (baseline.yawROM / 2) * pct;
-      const pitchRangeDeg = (baseline.pitchROM / 2) * pct;
-      const rollRangeDeg = (baseline.rollROM / 2) * pct;
-      const speed = parseFloat($('speed').value);
-      const jumpAmp = parseFloat($('jumpAmp').value);
-
-      const star = document.querySelector('#star');
-      const attrs = [
-        `mode: cycle`,
-        `cycleOrder: drift,circle,figure8,jumps`,
-        `cycleMinSec: 35`,
-        `cycleMaxSec: 55`,
-        `yawRangeDeg: ${clamp(yawRangeDeg, 0, 80)}`,
-        `pitchRangeDeg: ${clamp(pitchRangeDeg, 0, 60)}`,
-        `rollRangeDeg: ${clamp(rollRangeDeg, 0, 40)}`,
-        `distMin: 1.2`,
-        `distMax: 2.2`,
-        `speed: ${speed}`,
-        `holdMin: 0.55`,
-        `holdMax: 1.25`,
-        `circlePeriodSec: 11.0`,
-        `fig8PeriodSec: 13.0`,
-        `jumpAmplitude: ${jumpAmp}`,
-        `arcBulge: 0.35`
-      ].join('; ');
-      star.setAttribute('pursuit3axis', attrs);
-    }
-
-    function resetPursuitStar() {
-      const starEl = document.querySelector('#star');
-      const comp = starEl && starEl.components.pursuit3axis;
-      if (comp) comp._snapToInitial();
-    }
-
-    function startTraining() {
-      if (!baseline) {
-        calStatus.textContent = 'Please calibrate baseline ROM first.';
-        return;
-      }
-      if (!window.qNeutral) {
-        calStatus.textContent = 'Please Set Neutral first.';
-        return;
-      }
-
-      window.trainingMode = modeSelect.value;
-      const scene = document.querySelector('a-scene');
-      if (scene && scene.enterVR) scene.enterVR();
-
-      trainingActive = true;
-      window.trainingActive = true;
-
-      btnEnterVr.disabled = true;
-      btnStartCal.disabled = true;
-      btnSetNeutral.disabled = true;
-      btnEndTraining.disabled = false;
-      btnRetest.disabled = true;
-
-      if (window.trainingMode === 'pursuit') {
-        applyPursuitSettingsFromBaseline();
-        resetPursuitStar();
-        const dur = parseInt($('duration').value, 10);
-        trainingEndsAt = performance.now() + dur * 1000;
-        calStatus.textContent = `Pursuit running (${dur/60} min).`;
-      } else {
-        trainingEndsAt = Infinity;
-        document.querySelector('#traceController').components['curve-trace-controller'].startSession();
-        calStatus.textContent = 'Coral tracing running (10 trials).';
-      }
-    }
-
-    function endTraining(reason = 'manual') {
-      if (!trainingActive && !window.trainingActive) return;
-
-      trainingActive = false;
-      window.trainingActive = false;
-
-      const traceComp = document.querySelector('#traceController').components['curve-trace-controller'];
-      traceComp.resetSession();
-
-      const scene = document.querySelector('a-scene');
-      if (scene && scene.is && scene.is('vr-mode') && scene.exitVR) {
-        scene.exitVR();
-      }
-
-      btnEndTraining.disabled = true;
-      btnRetest.disabled = false;
-      btnSetNeutral.disabled = false;
-      btnStartCal.disabled = false;
-      btnEnterVr.disabled = false;
-
-      if (reason === 'timer') {
-        calStatus.textContent = 'Pursuit finished. Returned to main menu. Set Neutral again, then run Post-training Re-test.';
-      } else if (reason !== 'modeComplete') {
-        calStatus.textContent = 'Training ended. Returned to main menu. Set Neutral again, then run Post-training Re-test.';
-      } else {
-        calStatus.textContent = 'Returned to main menu. Set Neutral again, then run Post-training Re-test.';
-      }
-    }
-
-    function rafLoop() {
-      const camObj = getCameraObj();
-      if (camObj && neutralCaptured) {
-        const { yaw, pitch, roll } = getRelativeYPRDeg(camObj, qNeutral);
-        liveYaw.textContent = fmt1(yaw);
-        livePitch.textContent = fmt1(pitch);
-        liveRoll.textContent = fmt1(roll);
-
-        if (calPhase === CAL.yaw || calPhase === CAL.pitch || calPhase === CAL.roll) {
-          extremes.yawMin = Math.min(extremes.yawMin, yaw);
-          extremes.yawMax = Math.max(extremes.yawMax, yaw);
-          extremes.pitchMin = Math.min(extremes.pitchMin, pitch);
-          extremes.pitchMax = Math.max(extremes.pitchMax, pitch);
-          extremes.rollMin = Math.min(extremes.rollMin, roll);
-          extremes.rollMax = Math.max(extremes.rollMax, roll);
-        }
-      }
-
-      if (trainingActive && window.trainingMode === 'pursuit' && performance.now() >= trainingEndsAt) {
-        endTraining('timer');
-      }
-      requestAnimationFrame(rafLoop);
-    }
-
-    btnSetNeutral.addEventListener('click', setNeutral);
-    btnStartCal.addEventListener('click', () => runCalibration(false));
-    btnEnterVr.addEventListener('click', startTraining);
-    btnEndTraining.addEventListener('click', () => endTraining('manual'));
-    btnRetest.addEventListener('click', async () => {
-      if (!neutralCaptured) {
-        calStatus.textContent = 'Set Neutral first.';
-        return;
-      }
-      await runCalibration(true);
-      btnRetest.disabled = true;
+    // ----------------------------
+    // UI events
+    // ----------------------------
+    ui.trainPct.addEventListener('input', () => {
+      ui.trainPctOut.textContent = `${ui.trainPct.value}%`;
     });
-    btnClear.addEventListener('click', clearSaved);
+    ui.trainPctOut.textContent = `${ui.trainPct.value}%`;
 
-    btnStartCal.disabled = true;
+    ui.btnToggleVr.addEventListener('click', toggleVr);
+    ui.btnSetNeutral.addEventListener('click', setNeutral);
+    ui.btnStartCal.addEventListener('click', () => startCalibration(false));
+    ui.btnRetest.addEventListener('click', () => startCalibration(true));
+    ui.btnStartTraining.addEventListener('click', startTraining);
+    ui.btnEndTraining.addEventListener('click', () => endTraining('manual'));
+    ui.btnClear.addEventListener('click', clearSaved);
+
+    // ----------------------------
+    // Scene VR state listeners
+    // ----------------------------
+    window.addEventListener('load', () => {
+      const scene = getSceneEl();
+      if (!scene) return;
+
+      scene.addEventListener('enter-vr', () => {
+        ui.calStatus.textContent = appState.neutralCaptured
+          ? 'In VR. Set neutral again if needed, then calibrate.'
+          : 'In VR. Set neutral, then calibrate.';
+      });
+
+      scene.addEventListener('exit-vr', () => {
+        const calComp = getCalibrationController();
+        if (calComp) calComp.hideBoard();
+        ui.calStatus.textContent = 'Exited VR. Enter VR again before calibration or training.';
+      });
+    });
+
+    // ----------------------------
+    // Initial app boot
+    // ----------------------------
+    ui.btnStartCal.disabled = true;
     loadSaved();
     updateResultsUI();
     requestAnimationFrame(rafLoop);
   </script>
 
-  <a-scene webxr="referenceSpaceType: local-floor"
-           renderer="colorManagement: true"
-           background="color: #06243a"
-           fog="type: exponential; color: #08314a; density: 0.022"
-           vr-mode-ui="enabled: true">
-
-    <a-entity underwater-particles="count: 1600; radius: 34; height: 20; size: 0.05"
-              animation="property: rotation; to: 0 360 0; loop: true; dur: 280000; easing: linear"></a-entity>
+  <a-scene
+    webxr="referenceSpaceType: local-floor"
+    renderer="colorManagement: true"
+    background="color: #06243a"
+    fog="type: exponential; color: #08314a; density: 0.022"
+    vr-mode-ui="enabled: true"
+  >
+    <a-entity
+      underwater-particles="count: 1600; radius: 34; height: 20; size: 0.05"
+      animation="property: rotation; to: 0 360 0; loop: true; dur: 280000; easing: linear"
+    ></a-entity>
 
     <a-entity light="type: ambient; intensity: 0.85; color: #8cd8ff"></a-entity>
     <a-entity light="type: directional; intensity: 0.55; color: #b6f0ff" position="1 3 1"></a-entity>
@@ -1405,26 +2126,88 @@
 
     <a-entity id="rig">
       <a-camera position="0 0 0">
-        <a-entity position="0 0 -1"
-                  geometry="primitive: ring; radiusInner: 0.012; radiusOuter: 0.016"
-                  material="color: #FFFFFF; shader: flat; opacity: 0.92"></a-entity>
+        <a-entity
+          position="0 0 -1"
+          geometry="primitive: ring; radiusInner: 0.012; radiusOuter: 0.016"
+          material="color: #FFFFFF; shader: flat; opacity: 0.92"
+        ></a-entity>
       </a-camera>
     </a-entity>
 
-    <a-entity id="star"
-      pursuit3axis="mode: cycle; yawRangeDeg: 25; pitchRangeDeg: 15; rollRangeDeg: 10; distMin: 1.2; distMax: 2.2; speed: 0.20; jumpAmplitude: 0.7; arcBulge: 0.35;">
-      <a-sphere radius="0.03"
-                material="color: #ffe27a; emissive: #ffe27a; emissiveIntensity: 1.0; shader: standard"></a-sphere>
-      <a-entity geometry="primitive: icosahedron; radius: 0.055"
-                material="color: #ffd24a; wireframe: true; opacity: 0.6"
-                animation="property: rotation; to: 0 360 0; loop: true; dur: 1800; easing: linear"></a-entity>
+    <a-entity id="calibrationController" calibration-controller></a-entity>
+
+    <!-- Calibration board -->
+    <a-entity id="calBoard" visible="false">
+      <a-circle radius="1.2" segments="96"
+                material="color: #6fdcff; shader: flat; opacity: 0.06; side: double"
+                position="0 0 -0.004"></a-circle>
+
+      <a-ring radius-inner="0.595" radius-outer="0.605"
+              material="color: #7bdcff; shader: flat; opacity: 0.55; side: double"></a-ring>
+
+      <a-ring radius-inner="1.195" radius-outer="1.205"
+              material="color: #7bdcff; shader: flat; opacity: 0.65; side: double"></a-ring>
+
+      <a-entity id="calHLine"
+                geometry="primitive: box; width: 3.0; height: 0.012; depth: 0.005"
+                material="color: #7bdcff; emissive: #7bdcff; emissiveIntensity: 0.35; opacity: 0.55"></a-entity>
+
+      <a-entity id="calVLine"
+                geometry="primitive: box; width: 0.012; height: 3.0; depth: 0.005"
+                material="color: #7bdcff; emissive: #7bdcff; emissiveIntensity: 0.35; opacity: 0.55"></a-entity>
+
+      <a-entity geometry="primitive: box; width: 2.12; height: 0.01; depth: 0.005"
+                rotation="0 0 45"
+                material="color: #7bdcff; emissive: #7bdcff; emissiveIntensity: 0.22; opacity: 0.35"></a-entity>
+
+      <a-entity geometry="primitive: box; width: 2.12; height: 0.01; depth: 0.005"
+                rotation="0 0 -45"
+                material="color: #7bdcff; emissive: #7bdcff; emissiveIntensity: 0.22; opacity: 0.35"></a-entity>
+
+      <a-sphere radius="0.028"
+                material="color: #ffffff; emissive: #ffffff; emissiveIntensity: 1.0"></a-sphere>
+
+      <a-sphere id="calCursor" radius="0.04" position="0 0 0.02"
+                material="color: #ffe27a; emissive: #ffe27a; emissiveIntensity: 1.0"></a-sphere>
+
+      <a-entity id="calTraceRoot"></a-entity>
+
+      <a-entity id="calPromptText" position="0 1.75 0"
+                text="value: ; align: center; width: 2.3; color: #FFFFFF"></a-entity>
+    </a-entity>
+
+    <a-entity
+      id="star"
+      pursuit3axis="mode: cycle; yawRangeDeg: 25; pitchRangeDeg: 15; rollRangeDeg: 10; distMin: 1.2; distMax: 2.2; speed: 0.20; jumpAmplitude: 0.7; arcBulge: 0.35;"
+    >
+      <a-sphere
+        radius="0.03"
+        material="color: #ffe27a; emissive: #ffe27a; emissiveIntensity: 1.0; shader: standard"
+      ></a-sphere>
+      <a-entity
+        geometry="primitive: icosahedron; radius: 0.055"
+        material="color: #ffd24a; wireframe: true; opacity: 0.6"
+        animation="property: rotation; to: 0 360 0; loop: true; dur: 1800; easing: linear"
+      ></a-entity>
     </a-entity>
 
     <a-entity id="centralCoral" coral-growth position="0 0 -8.0">
-      <a-cylinder height="0.08" radius="0.24" scale="2.2 1 1.4" rotation="90 0 0"
-                  material="color: #7a6f4a; emissive: #4f472d; emissiveIntensity: 0.18; opacity: 0.98"></a-cylinder>
-      <a-cylinder height="0.03" radius="0.17" scale="1.6 1 1.0" rotation="90 0 0" position="0 0.015 0.01"
-                  material="color: #938358; emissive: #5e5131; emissiveIntensity: 0.12; opacity: 0.98"></a-cylinder>
+      <a-cylinder
+        height="0.08"
+        radius="0.24"
+        scale="2.2 1 1.4"
+        rotation="90 0 0"
+        material="color: #7a6f4a; emissive: #4f472d; emissiveIntensity: 0.18; opacity: 0.98"
+      ></a-cylinder>
+
+      <a-cylinder
+        height="0.03"
+        radius="0.17"
+        scale="1.6 1 1.0"
+        rotation="90 0 0"
+        position="0 0.015 0.01"
+        material="color: #938358; emissive: #5e5131; emissiveIntensity: 0.12; opacity: 0.98"
+      ></a-cylinder>
 
       <a-cylinder class="coralBranch" height="0.32" radius="0.06" color="#7b2a83" position="0 0.16 0"></a-cylinder>
       <a-cylinder class="coralBranch" height="0.28" radius="0.042" color="#a84db6" position="-0.15 0.27 0.03" rotation="0 0 25"></a-cylinder>
@@ -1432,32 +2215,63 @@
       <a-cylinder class="coralBranch" height="0.24" radius="0.035" color="#ff6fc4" position="-0.04 0.38 0.08" rotation="0 0 18"></a-cylinder>
       <a-cylinder class="coralBranch" height="0.24" radius="0.035" color="#65ffe7" position="0.06 0.39 -0.06" rotation="0 0 -18"></a-cylinder>
 
-      <a-sphere class="coralGlow" radius="0.085" position="-0.18 0.42 0.04"
-                material="color: #ff7ad6; emissive: #ff7ad6; emissiveIntensity: 0.55; opacity: 0.96"></a-sphere>
-      <a-sphere class="coralGlow" radius="0.08" position="0.19 0.40 -0.03"
-                material="color: #7afff0; emissive: #7afff0; emissiveIntensity: 0.55; opacity: 0.96"></a-sphere>
-      <a-sphere class="coralGlow" radius="0.07" position="0.0 0.49 0.05"
-                material="color: #ff7ad6; emissive: #ff7ad6; emissiveIntensity: 0.52; opacity: 0.96"></a-sphere>
+      <a-sphere
+        class="coralGlow"
+        radius="0.085"
+        position="-0.18 0.42 0.04"
+        material="color: #ff7ad6; emissive: #ff7ad6; emissiveIntensity: 0.55; opacity: 0.96"
+      ></a-sphere>
+
+      <a-sphere
+        class="coralGlow"
+        radius="0.08"
+        position="0.19 0.40 -0.03"
+        material="color: #7afff0; emissive: #7afff0; emissiveIntensity: 0.55; opacity: 0.96"
+      ></a-sphere>
+
+      <a-sphere
+        class="coralGlow"
+        radius="0.07"
+        position="0.0 0.49 0.05"
+        material="color: #ff7ad6; emissive: #ff7ad6; emissiveIntensity: 0.52; opacity: 0.96"
+      ></a-sphere>
     </a-entity>
 
     <a-entity id="traceController" curve-trace-controller></a-entity>
 
-    <a-sphere id="traceCenter" visible="false" radius="0.09"
-              material="color: #66ccff; emissive: #66ccff; emissiveIntensity: 1.0; opacity: 0.96"></a-sphere>
+    <a-sphere
+      id="traceCenter"
+      visible="false"
+      radius="0.09"
+      material="color: #66ccff; emissive: #66ccff; emissiveIntensity: 1.0; opacity: 0.96"
+    ></a-sphere>
 
-    <a-sphere id="traceStart" visible="false" radius="0.09"
-              material="color: #ffd27a; emissive: #ffd27a; emissiveIntensity: 1.0; opacity: 0.96"></a-sphere>
+    <a-sphere
+      id="traceStart"
+      visible="false"
+      radius="0.09"
+      material="color: #ffd27a; emissive: #ffd27a; emissiveIntensity: 1.0; opacity: 0.96"
+    ></a-sphere>
 
-    <a-sphere id="traceBall" visible="false" radius="0.048"
-              material="color: #fff8d6; emissive: #fff8d6; emissiveIntensity: 0.95; opacity: 0.98"></a-sphere>
+    <a-sphere
+      id="traceBall"
+      visible="false"
+      radius="0.048"
+      material="color: #fff8d6; emissive: #fff8d6; emissiveIntensity: 0.95; opacity: 0.98"
+    ></a-sphere>
 
-    <a-entity id="traceHud" visible="false"
-              hud-follow="distance: 1.55; height: 0.28; smoothing: 0.12"
-              text="value: ; align: center; width: 2.1; color: #FFFFFF"></a-entity>
+    <a-entity
+      id="traceHud"
+      visible="false"
+      hud-follow="distance: 1.55; height: 0.28; smoothing: 0.12"
+      text="value: ; align: center; width: 2.1; color: #FFFFFF"
+    ></a-entity>
 
-    <a-entity id="holdTimerText" visible="false"
-              text="value: ; align: center; width: 1.25; color: #FFFFFF"></a-entity>
-
+    <a-entity
+      id="holdTimerText"
+      visible="false"
+      text="value: ; align: center; width: 1.25; color: #FFFFFF"
+    ></a-entity>
   </a-scene>
 </body>
 </html>
