@@ -127,7 +127,7 @@
   <div class="panel" id="ui">
     <div class="title">Head Pursuit Trainer — Pursuit + Coral Tracing</div>
     <div class="mini">
-      Calibration is now VR-only. Enter VR first, then set neutral, then run calibration.
+      Calibration is VR-only. Enter VR first, then set neutral, then run calibration.
     </div>
 
     <div class="grid">
@@ -236,12 +236,13 @@
     // ----------------------------
     // App-level constants / config
     // ----------------------------
-    const STORAGE_KEY = 'trainer_rom_v18';
+    const STORAGE_KEY = 'trainer_rom_v19';
 
     const CALIBRATION_PHASE = Object.freeze({
       IDLE: 'idle',
       YAW: 'yaw',
       PITCH: 'pitch',
+      DIAGONALS: 'diagonals',
       COMPLETE: 'complete'
     });
 
@@ -284,15 +285,17 @@
       },
 
       calibration: {
-        boardDistance: 4.5,
+        boardDistance: 2.0,
         innerRadius: 0.6,
         outerRadius: 1.2,
         maxRadius: 1.5,
         spokeExtent: 1.5,
         yawSec: 10,
         pitchSec: 10,
+        diagonalsSec: 10,
         promptYaw: 'Move your head left and right along the horizontal line.',
         promptPitch: 'Move your head up and down along the vertical line.',
+        promptDiagonals: 'Move outward and back along the diagonal guides.',
         traceSampleMinDist: 0.025
       }
     });
@@ -884,7 +887,7 @@
     });
 
     // ----------------------------
-    // A-Frame: new calibration controller
+    // A-Frame: calibration controller
     // ----------------------------
     AFRAME.registerComponent('calibration-controller', {
       init: function () {
@@ -898,6 +901,8 @@
 
         this.hLine = document.querySelector('#calHLine');
         this.vLine = document.querySelector('#calVLine');
+        this.diagA = document.querySelector('#calDiagA');
+        this.diagB = document.querySelector('#calDiagB');
 
         this.session = null;
         this.lastTracePt = null;
@@ -913,7 +918,8 @@
           cursor: { x: 0, y: 0 },
           traces: {
             yaw: [],
-            pitch: []
+            pitch: [],
+            diagonals: []
           },
           extrema: {
             leftYawMax: 0,
@@ -984,6 +990,14 @@
             ? 'color: #dff8ff; emissive: #dff8ff; emissiveIntensity: 1.0; opacity: 0.95'
             : 'color: #7bdcff; emissive: #7bdcff; emissiveIntensity: 0.35; opacity: 0.55'
         );
+
+        const diagMat =
+          phase === CALIBRATION_PHASE.DIAGONALS
+            ? 'color: #dff8ff; emissive: #dff8ff; emissiveIntensity: 0.95; opacity: 0.8'
+            : 'color: #7bdcff; emissive: #7bdcff; emissiveIntensity: 0.22; opacity: 0.35';
+
+        this.diagA.setAttribute('material', diagMat);
+        this.diagB.setAttribute('material', diagMat);
       },
 
       startSession: function (isRetest = false) {
@@ -1021,7 +1035,8 @@
           },
           traces: {
             yawTrace: this.session.traces.yaw,
-            pitchTrace: this.session.traces.pitch
+            pitchTrace: this.session.traces.pitch,
+            diagonalTrace: this.session.traces.diagonals
           },
           warnings: [...this.session.warnings]
         };
@@ -1046,6 +1061,17 @@
         }
 
         if (this.session.phase === CALIBRATION_PHASE.PITCH) {
+          this.session.phase = CALIBRATION_PHASE.DIAGONALS;
+          this.session.phaseStartedAt = performance.now();
+          this.setGuideHighlight(CALIBRATION_PHASE.DIAGONALS);
+          this.setPrompt(CONFIG.calibration.promptDiagonals);
+          ui.calStatus.textContent = this.session.isRetest
+            ? 'Re-test calibration running: diagonals.'
+            : 'Baseline calibration running: diagonals.';
+          return;
+        }
+
+        if (this.session.phase === CALIBRATION_PHASE.DIAGONALS) {
           this.finishSession();
         }
       },
@@ -1087,7 +1113,7 @@
 
       getBoardPointFromAngles: function (yawDeg, pitchDeg) {
         return {
-          x: this.mapSignedAngleToBoardAxis(yawDeg),
+          x: -this.mapSignedAngleToBoardAxis(yawDeg),
           y: this.mapSignedAngleToBoardAxis(pitchDeg)
         };
       },
@@ -1097,7 +1123,9 @@
       },
 
       addTraceDotIfNeeded: function (pt, phase, yaw, pitch, roll, elapsedSec) {
-        const color = phase === CALIBRATION_PHASE.YAW ? '#ffe27a' : '#7afff0';
+        let color = '#ffe27a';
+        if (phase === CALIBRATION_PHASE.PITCH) color = '#7afff0';
+        if (phase === CALIBRATION_PHASE.DIAGONALS) color = '#ff9cf0';
 
         if (this.lastTracePt) {
           const dx = pt.x - this.lastTracePt.x;
@@ -1124,6 +1152,7 @@
 
         if (phase === CALIBRATION_PHASE.YAW) this.session.traces.yaw.push(sample);
         if (phase === CALIBRATION_PHASE.PITCH) this.session.traces.pitch.push(sample);
+        if (phase === CALIBRATION_PHASE.DIAGONALS) this.session.traces.diagonals.push(sample);
 
         this.lastTracePt = { x: pt.x, y: pt.y };
       },
@@ -1156,6 +1185,11 @@
         }
 
         if (this.session.phase === CALIBRATION_PHASE.PITCH && elapsedSec >= CONFIG.calibration.pitchSec) {
+          this.advancePhase();
+          return;
+        }
+
+        if (this.session.phase === CALIBRATION_PHASE.DIAGONALS && elapsedSec >= CONFIG.calibration.diagonalsSec) {
           this.advancePhase();
         }
       }
@@ -2156,11 +2190,13 @@
                 geometry="primitive: box; width: 0.012; height: 3.0; depth: 0.005"
                 material="color: #7bdcff; emissive: #7bdcff; emissiveIntensity: 0.35; opacity: 0.55"></a-entity>
 
-      <a-entity geometry="primitive: box; width: 2.12; height: 0.01; depth: 0.005"
+      <a-entity id="calDiagA"
+                geometry="primitive: box; width: 2.12; height: 0.01; depth: 0.005"
                 rotation="0 0 45"
                 material="color: #7bdcff; emissive: #7bdcff; emissiveIntensity: 0.22; opacity: 0.35"></a-entity>
 
-      <a-entity geometry="primitive: box; width: 2.12; height: 0.01; depth: 0.005"
+      <a-entity id="calDiagB"
+                geometry="primitive: box; width: 2.12; height: 0.01; depth: 0.005"
                 rotation="0 0 -45"
                 material="color: #7bdcff; emissive: #7bdcff; emissiveIntensity: 0.22; opacity: 0.35"></a-entity>
 
