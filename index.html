@@ -236,7 +236,7 @@
     // ----------------------------
     // App-level constants / config
     // ----------------------------
-    const STORAGE_KEY = 'trainer_rom_v20';
+    const STORAGE_KEY = 'trainer_rom_v21';
 
     const CALIBRATION_PHASE = Object.freeze({
       IDLE: 'idle',
@@ -244,6 +244,9 @@
       YAW: 'yaw',
       PITCH: 'pitch',
       DIAGONALS: 'diagonals',
+      CIRCLE_CW: 'circleCW',
+      CIRCLE_CCW: 'circleCCW',
+      WAIT_EXIT: 'waitExit',
       COMPLETE: 'complete'
     });
 
@@ -295,10 +298,19 @@
         yawSec: 10,
         pitchSec: 10,
         diagonalsSec: 20,
-        introPrompt: 'Follow highlighted lines: horizontal, vertical, then diagonal.',
+        circleTimeoutSec: 20,
+        circleMinRadius: 0.25,
+        circleSectorCount: 8,
+        circleReturnAngleDeg: 45,
+        circleMinSectorCoverage: 7,
+        circleMinProgressDeg: 270,
+        introPrompt: 'Follow highlighted lines: horizontal, vertical, then diagonal and circle.',
         promptYaw: 'Horizontal',
         promptPitch: 'Vertical',
         promptDiagonals: 'Diagonal',
+        promptCircleCW: 'Trace a clockwise circle.',
+        promptCircleCCW: 'Trace an anticlockwise circle.',
+        promptDone: 'Calibration complete.\nPress A on right controller to return.',
         traceSampleMinDist: 0.025
       }
     });
@@ -478,6 +490,12 @@
         return;
       }
 
+      function circleText(cal) {
+        if (!cal.completion) return '';
+        return `CW ${cal.completion.circleCWCompleted ? 'complete' : 'incomplete'}${cal.completion.circleCWTimedOut ? ' (timeout)' : ''}, ` +
+               `CCW ${cal.completion.circleCCWCompleted ? 'complete' : 'incomplete'}${cal.completion.circleCCWTimedOut ? ' (timeout)' : ''}`;
+      }
+
       if (baselineCal && !retestCal) {
         ui.results.innerHTML =
           `<div>Baseline (${new Date(baselineCal.timestamp).toLocaleString()}): ` +
@@ -487,6 +505,7 @@
           `R yaw ${fmtDeg(baselineCal.signedExtrema.rightYawMax)}, ` +
           `Down pitch ${fmtDeg(baselineCal.signedExtrema.downPitchMax)}, ` +
           `Up pitch ${fmtDeg(baselineCal.signedExtrema.upPitchMax)}</div>` +
+          `<div>Circles: ${circleText(baselineCal)}</div>` +
           (baselineCal.warnings?.length
             ? `<div>Warnings: ${baselineCal.warnings.join(' | ')}</div>`
             : `<div>No warnings.</div>`);
@@ -503,6 +522,8 @@
           `<div>Baseline: Yaw ${fmtDeg(baselineCal.rom.yawROM)} | Pitch ${fmtDeg(baselineCal.rom.pitchROM)} | Roll ${fmtDeg(baselineCal.rom.rollROM)}</div>` +
           `<div>Re-test: Yaw ${fmtDeg(retestCal.rom.yawROM)} | Pitch ${fmtDeg(retestCal.rom.pitchROM)} | Roll ${fmtDeg(retestCal.rom.rollROM)}</div>` +
           `<div><b>Change:</b> Yaw ${sign(dYaw)}${fmtDeg(dYaw)} | Pitch ${sign(dPitch)}${fmtDeg(dPitch)} | Roll ${sign(dRoll)}${fmtDeg(dRoll)}</div>` +
+          `<div>Baseline circles: ${circleText(baselineCal)}</div>` +
+          `<div>Re-test circles: ${circleText(retestCal)}</div>` +
           (retestCal.warnings?.length
             ? `<div>Re-test warnings: ${retestCal.warnings.join(' | ')}</div>`
             : `<div>No re-test warnings.</div>`);
@@ -531,10 +552,10 @@
       if (!isRetest) {
         ui.btnStartTraining.disabled = false;
         ui.btnRetest.disabled = true;
-        ui.calStatus.textContent = 'Baseline calibration saved. You can start training.';
+        ui.calStatus.textContent = 'Baseline calibration saved. Press A to return.';
       } else {
         ui.btnRetest.disabled = true;
-        ui.calStatus.textContent = 'Re-test calibration saved.';
+        ui.calStatus.textContent = 'Re-test calibration saved. Press A to return.';
       }
     }
 
@@ -907,10 +928,26 @@
         this.vLine = document.querySelector('#calVLine');
         this.diagA = document.querySelector('#calDiagA');
         this.diagB = document.querySelector('#calDiagB');
+        this.innerRing = document.querySelector('#calInnerRing');
+        this.outerRing = document.querySelector('#calOuterRing');
 
         this.session = null;
         this.lastTracePt = null;
         this.traceDots = [];
+
+        this._onAButton = this._onAButton.bind(this);
+      },
+
+      createCircleTracker: function () {
+        return {
+          completed: false,
+          timedOut: false,
+          visitedSectors: Array(CONFIG.calibration.circleSectorCount).fill(false),
+          startAngleDeg: null,
+          lastAngleDeg: null,
+          directionScore: 0,
+          totalAbsProgress: 0
+        };
       },
 
       createSession: function (isRetest) {
@@ -923,7 +960,9 @@
           traces: {
             yaw: [],
             pitch: [],
-            diagonals: []
+            diagonals: [],
+            circleCW: [],
+            circleCCW: []
           },
           extrema: {
             leftYawMax: 0,
@@ -933,6 +972,8 @@
             leftRollMax: 0,
             rightRollMax: 0
           },
+          circleCW: this.createCircleTracker(),
+          circleCCW: this.createCircleTracker(),
           warnings: []
         };
       },
@@ -1010,6 +1051,18 @@
 
         this.diagA.setAttribute('material', diagMat);
         this.diagB.setAttribute('material', diagMat);
+
+        const ringMat =
+          (phase === CALIBRATION_PHASE.CIRCLE_CW || phase === CALIBRATION_PHASE.CIRCLE_CCW)
+            ? 'color: #dff8ff; shader: flat; opacity: 0.92; side: double'
+            : 'color: #7bdcff; shader: flat; opacity: 0.55; side: double';
+
+        this.innerRing.setAttribute('material', ringMat);
+        this.outerRing.setAttribute('material',
+          (phase === CALIBRATION_PHASE.CIRCLE_CW || phase === CALIBRATION_PHASE.CIRCLE_CCW)
+            ? 'color: #dff8ff; shader: flat; opacity: 0.98; side: double'
+            : 'color: #7bdcff; shader: flat; opacity: 0.65; side: double'
+        );
       },
 
       startSession: function (isRetest = false) {
@@ -1025,6 +1078,28 @@
         ui.calStatus.textContent = isRetest
           ? 'Re-test calibration: read intro, then yaw.'
           : 'Baseline calibration: read intro, then yaw.';
+      },
+
+      startWaitExit: function (result) {
+        applyCalibrationResult(result, this.session.isRetest);
+        this.hideBoard();
+        this.showIntroHud(CONFIG.calibration.promptDone);
+        this.session.phase = CALIBRATION_PHASE.WAIT_EXIT;
+        this.sceneElRef.addEventListener('abuttondown', this._onAButton);
+      },
+
+      _onAButton: function () {
+        if (!this.session || this.session.phase !== CALIBRATION_PHASE.WAIT_EXIT) return;
+
+        this.sceneElRef.removeEventListener('abuttondown', this._onAButton);
+        this.hideBoard();
+        this.hideIntroHud();
+        this.session.phase = CALIBRATION_PHASE.COMPLETE;
+
+        const scene = getSceneEl();
+        if (scene && scene.is && scene.is('vr-mode') && scene.exitVR) {
+          scene.exitVR();
+        }
       },
 
       finishSession: function () {
@@ -1049,15 +1124,20 @@
           traces: {
             yawTrace: this.session.traces.yaw,
             pitchTrace: this.session.traces.pitch,
-            diagonalTrace: this.session.traces.diagonals
+            diagonalTrace: this.session.traces.diagonals,
+            circleCWTrace: this.session.traces.circleCW,
+            circleCCWTrace: this.session.traces.circleCCW
+          },
+          completion: {
+            circleCWCompleted: this.session.circleCW.completed,
+            circleCCWCompleted: this.session.circleCCW.completed,
+            circleCWTimedOut: this.session.circleCW.timedOut,
+            circleCCWTimedOut: this.session.circleCCW.timedOut
           },
           warnings: [...this.session.warnings]
         };
 
-        this.hideBoard();
-        this.hideIntroHud();
-        applyCalibrationResult(result, this.session.isRetest);
-        this.session.phase = CALIBRATION_PHASE.COMPLETE;
+        this.startWaitExit(result);
       },
 
       advancePhase: function () {
@@ -1068,7 +1148,6 @@
           this.session.phaseStartedAt = performance.now();
           this.hideIntroHud();
           this.setGuideHighlight(CALIBRATION_PHASE.YAW);
-          this.setPrompt(CONFIG.calibration.promptYaw);
           ui.calStatus.textContent = this.session.isRetest
             ? 'Re-test calibration running: yaw.'
             : 'Baseline calibration running: yaw.';
@@ -1079,7 +1158,6 @@
           this.session.phase = CALIBRATION_PHASE.PITCH;
           this.session.phaseStartedAt = performance.now();
           this.setGuideHighlight(CALIBRATION_PHASE.PITCH);
-          this.setPrompt(CONFIG.calibration.promptPitch);
           ui.calStatus.textContent = this.session.isRetest
             ? 'Re-test calibration running: pitch.'
             : 'Baseline calibration running: pitch.';
@@ -1090,7 +1168,6 @@
           this.session.phase = CALIBRATION_PHASE.DIAGONALS;
           this.session.phaseStartedAt = performance.now();
           this.setGuideHighlight(CALIBRATION_PHASE.DIAGONALS);
-          this.setPrompt(CONFIG.calibration.promptDiagonals);
           ui.calStatus.textContent = this.session.isRetest
             ? 'Re-test calibration running: diagonals.'
             : 'Baseline calibration running: diagonals.';
@@ -1098,6 +1175,26 @@
         }
 
         if (this.session.phase === CALIBRATION_PHASE.DIAGONALS) {
+          this.session.phase = CALIBRATION_PHASE.CIRCLE_CW;
+          this.session.phaseStartedAt = performance.now();
+          this.setGuideHighlight(CALIBRATION_PHASE.CIRCLE_CW);
+          ui.calStatus.textContent = this.session.isRetest
+            ? 'Re-test calibration running: clockwise circle.'
+            : 'Baseline calibration running: clockwise circle.';
+          return;
+        }
+
+        if (this.session.phase === CALIBRATION_PHASE.CIRCLE_CW) {
+          this.session.phase = CALIBRATION_PHASE.CIRCLE_CCW;
+          this.session.phaseStartedAt = performance.now();
+          this.setGuideHighlight(CALIBRATION_PHASE.CIRCLE_CCW);
+          ui.calStatus.textContent = this.session.isRetest
+            ? 'Re-test calibration running: anticlockwise circle.'
+            : 'Baseline calibration running: anticlockwise circle.';
+          return;
+        }
+
+        if (this.session.phase === CALIBRATION_PHASE.CIRCLE_CCW) {
           this.finishSession();
         }
       },
@@ -1152,6 +1249,8 @@
         let color = '#ffe27a';
         if (phase === CALIBRATION_PHASE.PITCH) color = '#7afff0';
         if (phase === CALIBRATION_PHASE.DIAGONALS) color = '#ff9cf0';
+        if (phase === CALIBRATION_PHASE.CIRCLE_CW) color = '#8ee8ff';
+        if (phase === CALIBRATION_PHASE.CIRCLE_CCW) color = '#ffd58e';
 
         if (this.lastTracePt) {
           const dx = pt.x - this.lastTracePt.x;
@@ -1179,13 +1278,87 @@
         if (phase === CALIBRATION_PHASE.YAW) this.session.traces.yaw.push(sample);
         if (phase === CALIBRATION_PHASE.PITCH) this.session.traces.pitch.push(sample);
         if (phase === CALIBRATION_PHASE.DIAGONALS) this.session.traces.diagonals.push(sample);
+        if (phase === CALIBRATION_PHASE.CIRCLE_CW) this.session.traces.circleCW.push(sample);
+        if (phase === CALIBRATION_PHASE.CIRCLE_CCW) this.session.traces.circleCCW.push(sample);
 
         this.lastTracePt = { x: pt.x, y: pt.y };
       },
 
+      normalizeAngleDeg: function (angleDeg) {
+        let a = angleDeg % 360;
+        if (a < 0) a += 360;
+        return a;
+      },
+
+      deltaAngleDeg: function (currentDeg, previousDeg) {
+        let d = currentDeg - previousDeg;
+        while (d > 180) d -= 360;
+        while (d < -180) d += 360;
+        return d;
+      },
+
+      getCircleGeometry: function (pt) {
+        const radius = Math.sqrt(pt.x * pt.x + pt.y * pt.y);
+        const angleDeg = this.normalizeAngleDeg(rad2deg(Math.atan2(pt.y, pt.x)));
+        return { radius, angleDeg };
+      },
+
+      getSectorIndex: function (angleDeg) {
+        const n = CONFIG.calibration.circleSectorCount;
+        return Math.floor((angleDeg / 360) * n) % n;
+      },
+
+      countVisitedSectors: function (tracker) {
+        return tracker.visitedSectors.reduce((a, b) => a + (b ? 1 : 0), 0);
+      },
+
+      resetCircleTracker: function (tracker) {
+        tracker.completed = false;
+        tracker.timedOut = false;
+        tracker.visitedSectors = Array(CONFIG.calibration.circleSectorCount).fill(false);
+        tracker.startAngleDeg = null;
+        tracker.lastAngleDeg = null;
+        tracker.directionScore = 0;
+        tracker.totalAbsProgress = 0;
+      },
+
+      updateCircleTracker: function (tracker, pt, directionMode) {
+        const g = this.getCircleGeometry(pt);
+        if (g.radius < CONFIG.calibration.circleMinRadius) return;
+
+        const sector = this.getSectorIndex(g.angleDeg);
+        tracker.visitedSectors[sector] = true;
+
+        if (tracker.startAngleDeg === null) {
+          tracker.startAngleDeg = g.angleDeg;
+          tracker.lastAngleDeg = g.angleDeg;
+          return;
+        }
+
+        const delta = this.deltaAngleDeg(g.angleDeg, tracker.lastAngleDeg);
+        tracker.directionScore += delta;
+        tracker.totalAbsProgress += Math.abs(delta);
+        tracker.lastAngleDeg = g.angleDeg;
+
+        const visitedCount = this.countVisitedSectors(tracker);
+        const closeToStart = Math.abs(this.deltaAngleDeg(g.angleDeg, tracker.startAngleDeg)) <= CONFIG.calibration.circleReturnAngleDeg;
+
+        const directionOk =
+          directionMode === 'cw'
+            ? tracker.directionScore <= -CONFIG.calibration.circleMinProgressDeg
+            : tracker.directionScore >= CONFIG.calibration.circleMinProgressDeg;
+
+        const progressOk = tracker.totalAbsProgress >= CONFIG.calibration.circleMinProgressDeg;
+        const sectorsOk = visitedCount >= CONFIG.calibration.circleMinSectorCoverage;
+
+        if (directionOk && progressOk && sectorsOk && closeToStart) {
+          tracker.completed = true;
+        }
+      },
+
       tick: function () {
         if (!this.session) return;
-        if (this.session.phase === CALIBRATION_PHASE.IDLE || this.session.phase === CALIBRATION_PHASE.COMPLETE) return;
+        if (this.session.phase === CALIBRATION_PHASE.IDLE || this.session.phase === CALIBRATION_PHASE.COMPLETE || this.session.phase === CALIBRATION_PHASE.WAIT_EXIT) return;
         if (!window.qNeutral || !appState.neutralCaptured) return;
         if (!isInVrMode()) return;
 
@@ -1225,6 +1398,38 @@
 
         if (this.session.phase === CALIBRATION_PHASE.DIAGONALS && elapsedSec >= CONFIG.calibration.diagonalsSec) {
           this.advancePhase();
+          return;
+        }
+
+        if (this.session.phase === CALIBRATION_PHASE.CIRCLE_CW) {
+          this.updateCircleTracker(this.session.circleCW, pt, 'cw');
+
+          if (this.session.circleCW.completed) {
+            this.advancePhase();
+            return;
+          }
+
+          if (elapsedSec >= CONFIG.calibration.circleTimeoutSec) {
+            this.session.circleCW.timedOut = true;
+            this.session.warnings.push('Clockwise circle incomplete.');
+            this.advancePhase();
+            return;
+          }
+        }
+
+        if (this.session.phase === CALIBRATION_PHASE.CIRCLE_CCW) {
+          this.updateCircleTracker(this.session.circleCCW, pt, 'ccw');
+
+          if (this.session.circleCCW.completed) {
+            this.advancePhase();
+            return;
+          }
+
+          if (elapsedSec >= CONFIG.calibration.circleTimeoutSec) {
+            this.session.circleCCW.timedOut = true;
+            this.session.warnings.push('Anticlockwise circle incomplete.');
+            this.advancePhase();
+          }
         }
       }
     });
@@ -2213,10 +2418,10 @@
                 material="color: #6fdcff; shader: flat; opacity: 0.06; side: double"
                 position="0 0 -0.004"></a-circle>
 
-      <a-ring radius-inner="0.595" radius-outer="0.605"
+      <a-ring id="calInnerRing" radius-inner="0.595" radius-outer="0.605"
               material="color: #7bdcff; shader: flat; opacity: 0.55; side: double"></a-ring>
 
-      <a-ring radius-inner="1.195" radius-outer="1.205"
+      <a-ring id="calOuterRing" radius-inner="1.195" radius-outer="1.205"
               material="color: #7bdcff; shader: flat; opacity: 0.65; side: double"></a-ring>
 
       <a-entity id="calHLine"
