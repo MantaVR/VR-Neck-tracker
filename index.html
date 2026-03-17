@@ -287,9 +287,9 @@
       calibration: {
         boardDistance: 2.1,
         innerRadius: 0.8,
-        outerRadius: 1.8,
-        maxRadius: 2.9,
-        spokeExtent: 2.75,
+        outerRadius: 2.2,
+        maxRadius: 3.7,
+        spokeExtent: 3.45,
         introSec: 10,
         yawSec: 10,
         pitchSec: 10,
@@ -320,14 +320,15 @@
         traceLineColorPitch: '#7afff0',
         traceLineColorDiagonal: '#ff9cf0',
         traceLineWidth: 0.055,
-        sectorFillInnerRadius: 0.8,
-        sectorFillOuterRadius: 1.6,
+        sectorFillInnerRadius: 0.35,
+        sectorFillOuterRadius: 3.55,
         sectorFillOpacity: 0.0,
         sectorFillOpacityActive: 0.52,
         sectorFillColorCW: '#8ee8ff',
         sectorFillColorCCW: '#ffd58e',
         sectorVisualCount: 48,
-        sectorBandHalfWidth: 0.09,
+        sectorBandHalfWidth: 0.12,
+        promptDoneAutoExitSec: 10,
         sectorBandMinThickness: 0.08
       }
     });
@@ -930,6 +931,7 @@
       applyGuideGeometry: function () {
         const spokeTipRadius = CONFIG.calibration.spokeExtent;
         const guideLen = spokeTipRadius * 2;
+        const diagGuideLen = guideLen * Math.SQRT2;
 
         const boardBackingRadius = spokeTipRadius;
         this.boardBackingEl.setAttribute('radius', boardBackingRadius);
@@ -952,16 +954,16 @@
         this.vLineHalo.setAttribute('geometry', 'width', CONFIG.calibration.lineThickness * CONFIG.calibration.haloThicknessScale);
         this.vLineHalo.setAttribute('geometry', 'height', guideLen);
 
-        this.diagA.setAttribute('geometry', 'width', guideLen);
+        this.diagA.setAttribute('geometry', 'width', diagGuideLen);
         this.diagA.setAttribute('geometry', 'height', CONFIG.calibration.diagThickness);
 
-        this.diagAHalo.setAttribute('geometry', 'width', guideLen);
+        this.diagAHalo.setAttribute('geometry', 'width', diagGuideLen);
         this.diagAHalo.setAttribute('geometry', 'height', CONFIG.calibration.diagThickness * CONFIG.calibration.haloThicknessScale);
 
-        this.diagB.setAttribute('geometry', 'width', guideLen);
+        this.diagB.setAttribute('geometry', 'width', diagGuideLen);
         this.diagB.setAttribute('geometry', 'height', CONFIG.calibration.diagThickness);
 
-        this.diagBHalo.setAttribute('geometry', 'width', guideLen);
+        this.diagBHalo.setAttribute('geometry', 'width', diagGuideLen);
         this.diagBHalo.setAttribute('geometry', 'height', CONFIG.calibration.diagThickness * CONFIG.calibration.haloThicknessScale);
 
         const inner = CONFIG.calibration.innerRadius;
@@ -2737,13 +2739,13 @@
     
     <a-entity id="calBoard" visible="false">
       <a-circle id="calBoardBacking"
-                radius="2.75"
+                radius="3.45"
                 segments="128"
                 position="0 0 -0.01"
                 material="color: #cfd3d8; shader: flat; opacity: 1.0; side: double"></a-circle>
 
       <a-ring id="calBoardRim"
-              radius-inner="2.67" radius-outer="2.75"
+              radius-inner="3.37" radius-outer="3.45"
               segments-theta="128"
               position="0 0 -0.009"
               material="color: #9ea5ad; shader: flat; opacity: 1.0; side: double"></a-ring>
