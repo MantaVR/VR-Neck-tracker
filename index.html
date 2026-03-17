@@ -287,9 +287,9 @@
       calibration: {
         boardDistance: 2.1,
         innerRadius: 0.8,
-        outerRadius: 1.6,
-        maxRadius: 2.1,
-        spokeExtent: 2.0,
+        outerRadius: 1.8,
+        maxRadius: 2.3,
+        spokeExtent: 2.2,
         introSec: 10,
         yawSec: 10,
         pitchSec: 10,
@@ -306,7 +306,6 @@
         circleCCWPrompt: 'Now draw an anticlockwise circle.',
         promptDone: 'Calibration complete\nPress A on right controller to return.',
         traceSampleMinDist: 0.025,
-        boardBackingRadius: 2.05,
         arrowRadius: 1.72,
         arrowSpeedDegPerSec: 55,
         lineThickness: 0.03,
@@ -930,9 +929,10 @@
         const r = CONFIG.calibration.spokeExtent;
         const diagLen = Math.sqrt(2) * (r * 2);
 
-        this.boardBackingEl.setAttribute('radius', CONFIG.calibration.boardBackingRadius);
+        const boardBackingRadius = CONFIG.calibration.spokeExtent + 0.05;
+        this.boardBackingEl.setAttribute('radius', boardBackingRadius);
         if (this.boardRimEl) {
-          const rimOuter = CONFIG.calibration.boardBackingRadius;
+          const rimOuter = boardBackingRadius;
           const rimInner = Math.max(0.01, rimOuter - 0.08);
           this.boardRimEl.setAttribute('radius-inner', rimInner);
           this.boardRimEl.setAttribute('radius-outer', rimOuter);
@@ -2703,13 +2703,13 @@
     
     <a-entity id="calBoard" visible="false">
       <a-circle id="calBoardBacking"
-                radius="2.05"
+                radius="2.25"
                 segments="128"
                 position="0 0 -0.01"
                 material="color: #cfd3d8; shader: flat; opacity: 1.0; side: double"></a-circle>
 
       <a-ring id="calBoardRim"
-              radius-inner="1.97" radius-outer="2.05"
+              radius-inner="2.17" radius-outer="2.25"
               segments-theta="128"
               position="0 0 -0.009"
               material="color: #9ea5ad; shader: flat; opacity: 1.0; side: double"></a-ring>
