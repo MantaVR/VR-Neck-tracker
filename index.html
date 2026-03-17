@@ -926,10 +926,10 @@
       },
 
       applyGuideGeometry: function () {
-        const r = CONFIG.calibration.spokeExtent;
-        const diagLen = Math.sqrt(2) * (r * 2);
+        const spokeTipRadius = CONFIG.calibration.spokeExtent * 1.25;
+        const diagLen = Math.sqrt(2) * (spokeTipRadius * 2);
 
-        const boardBackingRadius = CONFIG.calibration.spokeExtent + 0.05;
+        const boardBackingRadius = spokeTipRadius;
         this.boardBackingEl.setAttribute('radius', boardBackingRadius);
         if (this.boardRimEl) {
           const rimOuter = boardBackingRadius;
@@ -938,17 +938,17 @@
           this.boardRimEl.setAttribute('radius-outer', rimOuter);
         }
 
-        this.hLine.setAttribute('geometry', 'width', r * 2);
+        this.hLine.setAttribute('geometry', 'width', spokeTipRadius * 2);
         this.hLine.setAttribute('geometry', 'height', CONFIG.calibration.lineThickness);
 
-        this.hLineHalo.setAttribute('geometry', 'width', r * 2);
+        this.hLineHalo.setAttribute('geometry', 'width', spokeTipRadius * 2);
         this.hLineHalo.setAttribute('geometry', 'height', CONFIG.calibration.lineThickness * CONFIG.calibration.haloThicknessScale);
 
         this.vLine.setAttribute('geometry', 'width', CONFIG.calibration.lineThickness);
-        this.vLine.setAttribute('geometry', 'height', r * 2);
+        this.vLine.setAttribute('geometry', 'height', spokeTipRadius * 2);
 
         this.vLineHalo.setAttribute('geometry', 'width', CONFIG.calibration.lineThickness * CONFIG.calibration.haloThicknessScale);
-        this.vLineHalo.setAttribute('geometry', 'height', r * 2);
+        this.vLineHalo.setAttribute('geometry', 'height', spokeTipRadius * 2);
 
         this.diagA.setAttribute('geometry', 'width', diagLen);
         this.diagA.setAttribute('geometry', 'height', CONFIG.calibration.diagThickness);
