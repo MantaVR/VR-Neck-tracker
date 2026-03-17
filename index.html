@@ -320,7 +320,7 @@
         traceLineColorYaw: '#ffe27a',
         traceLineColorPitch: '#7afff0',
         traceLineColorDiagonal: '#ff9cf0',
-        traceLineWidth: 0.01,
+        traceLineWidth: 0.055,
         sectorFillInnerRadius: 0.6,
         sectorFillOuterRadius: 1.2,
         sectorFillOpacity: 0.0,
@@ -855,6 +855,8 @@
         this.tracePoints = [];
         this.traceMaterial = null;
         this.traceGeometry = null;
+        this.tracePrevLeft = null;
+        this.tracePrevRight = null;
 
         this.circleSectorEls = [];
         this.arrowDirection = 0;
@@ -862,6 +864,7 @@
         this.lastArrowTime = 0;
 
         this._onAButton = this._onAButton.bind(this);
+        this._onWaitExitPress = this._onWaitExitPress.bind(this);
 
         this.applyGuideGeometry();
         this.buildCircleSectors();
@@ -987,6 +990,8 @@
           this.traceMaterial = null;
         }
         this.tracePoints = [];
+        this.tracePrevLeft = null;
+        this.tracePrevRight = null;
         this.lastTracePt = null;
       },
 
@@ -1219,15 +1224,64 @@
         const color = this.getTraceColorForPhase(phase);
 
         this.tracePoints = [];
+        this.tracePrevLeft = null;
+        this.tracePrevRight = null;
         this.traceGeometry = new THREE.BufferGeometry();
-        this.traceMaterial = new THREE.LineBasicMaterial({
+        this.traceMaterial = new THREE.MeshBasicMaterial({
           color,
           transparent: true,
-          opacity: 0.95
+          opacity: 0.92,
+          side: THREE.DoubleSide,
+          depthWrite: false
         });
 
-        this.traceLine = new THREE.Line(this.traceGeometry, this.traceMaterial);
+        this.traceLine = new THREE.Mesh(this.traceGeometry, this.traceMaterial);
         this.traceRoot.object3D.add(this.traceLine);
+      },
+
+      appendTraceRibbonPoint: function (pt) {
+        const width = CONFIG.calibration.traceLineWidth;
+        const current = new THREE.Vector2(pt.x, pt.y);
+
+        if (this.tracePoints.length === 0) {
+          this.tracePoints.push(current);
+          return;
+        }
+
+        const prev = this.tracePoints[this.tracePoints.length - 1];
+        const seg = current.clone().sub(prev);
+        if (seg.lengthSq() < 1e-8) return;
+
+        const normal = new THREE.Vector2(-seg.y, seg.x).normalize().multiplyScalar(width * 0.5);
+        const left = new THREE.Vector3(current.x + normal.x, current.y + normal.y, 0.01);
+        const right = new THREE.Vector3(current.x - normal.x, current.y - normal.y, 0.01);
+
+        if (!this.tracePrevLeft || !this.tracePrevRight) {
+          const startLeft = new THREE.Vector3(prev.x + normal.x, prev.y + normal.y, 0.01);
+          const startRight = new THREE.Vector3(prev.x - normal.x, prev.y - normal.y, 0.01);
+          this.tracePrevLeft = startLeft;
+          this.tracePrevRight = startRight;
+        }
+
+        const positions = this.traceGeometry.getAttribute('position');
+        const verts = positions ? Array.from(positions.array) : [];
+
+        verts.push(
+          this.tracePrevLeft.x, this.tracePrevLeft.y, this.tracePrevLeft.z,
+          this.tracePrevRight.x, this.tracePrevRight.y, this.tracePrevRight.z,
+          left.x, left.y, left.z,
+
+          left.x, left.y, left.z,
+          this.tracePrevRight.x, this.tracePrevRight.y, this.tracePrevRight.z,
+          right.x, right.y, right.z
+        );
+
+        this.traceGeometry.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
+        this.traceGeometry.computeVertexNormals();
+
+        this.tracePrevLeft = left;
+        this.tracePrevRight = right;
+        this.tracePoints.push(current);
       },
 
       startSession: function (isRetest = false) {
@@ -1246,21 +1300,45 @@
           : 'Baseline calibration: read intro, then yaw.';
       },
 
+      _attachWaitExitListeners: function () {
+        this._detachWaitExitListeners();
+        this.sceneElRef.addEventListener('abuttondown', this._onWaitExitPress);
+        this.sceneElRef.addEventListener('xbuttondown', this._onWaitExitPress);
+        this.sceneElRef.addEventListener('triggerdown', this._onWaitExitPress);
+      },
+
+      _detachWaitExitListeners: function () {
+        this.sceneElRef.removeEventListener('abuttondown', this._onWaitExitPress);
+        this.sceneElRef.removeEventListener('xbuttondown', this._onWaitExitPress);
+        this.sceneElRef.removeEventListener('triggerdown', this._onWaitExitPress);
+      },
+
+      _clearCompletionPrompt: function () {
+        this.hideIntroHud();
+        this.introHudEl.setAttribute('visible', 'false');
+        this.introHudEl.object3D.visible = false;
+        this.introHudEl.setAttribute('text', 'value', '');
+      },
+
+      _onWaitExitPress: function () {
+        if (!this.session || this.session.phase !== CALIBRATION_PHASE.WAIT_EXIT) return;
+        this._onAButton();
+      },
+
       startWaitExit: function (result) {
         applyCalibrationResult(result, this.session.isRetest);
         this.hideBoard();
         this.showIntroHud(CONFIG.calibration.promptDone);
         this.session.phase = CALIBRATION_PHASE.WAIT_EXIT;
-        this.sceneElRef.addEventListener('abuttondown', this._onAButton);
+        this._attachWaitExitListeners();
       },
 
       _onAButton: function () {
         if (!this.session || this.session.phase !== CALIBRATION_PHASE.WAIT_EXIT) return;
 
-        this.sceneElRef.removeEventListener('abuttondown', this._onAButton);
-        this.hideIntroHud();
+        this._detachWaitExitListeners();
+        this._clearCompletionPrompt();
         this.hideCircleArrow();
-        this.introHudEl.setAttribute('text', 'value', '');
         this.hideBoard();
         this.clearTraceDots();
         this.resetCircleSectors();
@@ -1384,27 +1462,35 @@
         else e.rightRollMax = Math.max(e.rightRollMax, roll);
       },
 
-      mapAngleMagnitudeToBoardDistance: function (angleDegAbs) {
-        const inner = CONFIG.calibration.innerRadius;
-        const outer = CONFIG.calibration.outerRadius;
-        const maxR = CONFIG.calibration.maxRadius;
+      getBoardPointFromGazeRay: function () {
+        if (!this.cameraEl || !this.boardEl) return null;
 
-        if (angleDegAbs <= 30) return inner * (angleDegAbs / 30);
-        if (angleDegAbs <= 60) return inner + (outer - inner) * ((angleDegAbs - 30) / 30);
+        const headWorld = new THREE.Vector3();
+        this.cameraEl.object3D.getWorldPosition(headWorld);
 
-        const extra = Math.min(angleDegAbs, 90) - 60;
-        return outer + (maxR - outer) * (extra / 30);
-      },
+        const gazeDirWorld = new THREE.Vector3(0, 0, -1)
+          .applyQuaternion(this.cameraEl.object3D.quaternion)
+          .normalize();
 
-      mapSignedAngleToBoardAxis: function (angleDeg) {
-        const sign = angleDeg < 0 ? -1 : 1;
-        return sign * this.mapAngleMagnitudeToBoardDistance(Math.abs(angleDeg));
-      },
+        const boardWorldPos = new THREE.Vector3();
+        this.boardEl.object3D.getWorldPosition(boardWorldPos);
 
-      getBoardPointFromAngles: function (yawDeg, pitchDeg) {
+        const boardNormalWorld = new THREE.Vector3(0, 0, 1)
+          .applyQuaternion(this.boardEl.object3D.quaternion)
+          .normalize();
+
+        const denom = gazeDirWorld.dot(boardNormalWorld);
+        if (Math.abs(denom) < 1e-5) return null;
+
+        const t = boardWorldPos.clone().sub(headWorld).dot(boardNormalWorld) / denom;
+        if (t <= 0) return null;
+
+        const hitWorld = headWorld.clone().add(gazeDirWorld.clone().multiplyScalar(t));
+        const hitLocal = this.boardEl.object3D.worldToLocal(hitWorld.clone());
+
         return {
-          x: -this.mapSignedAngleToBoardAxis(yawDeg),
-          y: this.mapSignedAngleToBoardAxis(pitchDeg)
+          x: hitLocal.x,
+          y: hitLocal.y
         };
       },
 
@@ -1424,22 +1510,19 @@
 
         if (phase === CALIBRATION_PHASE.YAW) {
           if (!this.traceLine) this.startTraceLine(phase);
-          this.tracePoints.push(new THREE.Vector3(pt.x, pt.y, 0.01));
-          this.traceGeometry.setFromPoints(this.tracePoints);
+          this.appendTraceRibbonPoint(pt);
           this.session.traces.yaw.push(sample);
         }
 
         if (phase === CALIBRATION_PHASE.PITCH) {
           if (!this.traceLine) this.startTraceLine(phase);
-          this.tracePoints.push(new THREE.Vector3(pt.x, pt.y, 0.01));
-          this.traceGeometry.setFromPoints(this.tracePoints);
+          this.appendTraceRibbonPoint(pt);
           this.session.traces.pitch.push(sample);
         }
 
         if (phase === CALIBRATION_PHASE.DIAGONALS) {
           if (!this.traceLine) this.startTraceLine(phase);
-          this.tracePoints.push(new THREE.Vector3(pt.x, pt.y, 0.01));
-          this.traceGeometry.setFromPoints(this.tracePoints);
+          this.appendTraceRibbonPoint(pt);
           this.session.traces.diagonals.push(sample);
         }
 
@@ -1574,7 +1657,8 @@
         const { yaw, pitch, roll } = getRelativeYPRDeg(camObj, appState.qNeutral);
         this.session.currentAngles = { yaw, pitch, roll };
 
-        const pt = this.getBoardPointFromAngles(yaw, pitch);
+        const pt = this.getBoardPointFromGazeRay();
+        if (!pt) return;
         this.moveCursor(pt);
         this.updateSignedExtrema(yaw, pitch, roll);
         this.addTraceDotIfNeeded(pt, this.session.phase, yaw, pitch, roll, elapsedSec);
@@ -2471,8 +2555,8 @@
         const calComp = getCalibrationController();
         if (calComp) {
           calComp.hideBoard();
-          calComp.hideIntroHud();
-          calComp.introHudEl.setAttribute('text', 'value', '');
+          calComp._detachWaitExitListeners();
+          calComp._clearCompletionPrompt();
           calComp.hideCircleArrow();
           calComp.hideCircleSectors();
           calComp.clearTraceDots();
