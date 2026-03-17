@@ -238,7 +238,9 @@
       YAW: 'yaw',
       PITCH: 'pitch',
       DIAGONALS: 'diagonals',
+      CIRCLE_CW_PROMPT: 'circleCWPrompt',
       CIRCLE_CW: 'circleCW',
+      CIRCLE_CCW_PROMPT: 'circleCCWPrompt',
       CIRCLE_CCW: 'circleCCW',
       WAIT_EXIT: 'waitExit',
       COMPLETE: 'complete'
@@ -292,6 +294,7 @@
         yawSec: 10,
         pitchSec: 10,
         diagonalsSec: 20,
+        circlePromptSec: 5,
         circleTimeoutSec: 40,
         circleMinRadius: 0.25,
         circleSectorCount: 8,
@@ -299,8 +302,32 @@
         circleMinSectorCoverage: 7,
         circleMinProgressDeg: 270,
         introPrompt: 'Follow highlighted lines: horizontal, vertical, then diagonal and circle.',
-        promptDone: 'Calibration complete.\nPress A on right controller to return.',
-        traceSampleMinDist: 0.025
+        circleCWPrompt: 'Now draw a clockwise circle.',
+        circleCCWPrompt: 'Now draw an anticlockwise circle.',
+        promptDone: 'Calibration complete.
+Press A on right controller to return.',
+        traceSampleMinDist: 0.025,
+        boardBackingRadius: 1.28,
+        arrowRadius: 1.28,
+        arrowSpeedDegPerSec: 55,
+        lineThickness: 0.03,
+        diagThickness: 0.026,
+        ringThickness: 0.028,
+        haloThicknessScale: 2.2,
+        guideOpacity: 0.82,
+        guideHaloOpacity: 0.18,
+        guideEmissive: 0.55,
+        guideEmissiveActive: 1.15,
+        traceLineColorYaw: '#ffe27a',
+        traceLineColorPitch: '#7afff0',
+        traceLineColorDiagonal: '#ff9cf0',
+        traceLineWidth: 0.01,
+        sectorFillInnerRadius: 0.6,
+        sectorFillOuterRadius: 1.2,
+        sectorFillOpacity: 0.0,
+        sectorFillOpacityActive: 0.52,
+        sectorFillColorCW: '#8ee8ff',
+        sectorFillColorCCW: '#ffd58e'
       }
     });
 
@@ -792,6 +819,7 @@
       }
     });
 
+    
     AFRAME.registerComponent('calibration-controller', {
       init: function () {
         this.cameraEl = getCameraEl();
@@ -803,6 +831,7 @@
         this.cursorEl = document.querySelector('#calCursor');
         this.traceRoot = document.querySelector('#calTraceRoot');
 
+        this.boardBackingEl = document.querySelector('#calBoardBacking');
         this.hLine = document.querySelector('#calHLine');
         this.vLine = document.querySelector('#calVLine');
         this.diagA = document.querySelector('#calDiagA');
@@ -810,11 +839,35 @@
         this.innerRing = document.querySelector('#calInnerRing');
         this.outerRing = document.querySelector('#calOuterRing');
 
+        this.hLineHalo = document.querySelector('#calHLineHalo');
+        this.vLineHalo = document.querySelector('#calVLineHalo');
+        this.diagAHalo = document.querySelector('#calDiagAHalo');
+        this.diagBHalo = document.querySelector('#calDiagBHalo');
+        this.innerRingHalo = document.querySelector('#calInnerRingHalo');
+        this.outerRingHalo = document.querySelector('#calOuterRingHalo');
+
+        this.circleArrowEl = document.querySelector('#calCircleArrow');
+        this.circleSectorGroup = document.querySelector('#calCircleSectorGroup');
+
         this.session = null;
         this.lastTracePt = null;
-        this.traceDots = [];
+
+        this.traceLine = null;
+        this.tracePoints = [];
+        this.traceMaterial = null;
+        this.traceGeometry = null;
+
+        this.circleSectorEls = [];
+        this.arrowDirection = 0;
+        this.arrowAngleDeg = 0;
+        this.lastArrowTime = 0;
 
         this._onAButton = this._onAButton.bind(this);
+
+        this.applyGuideGeometry();
+        this.buildCircleSectors();
+        this.hideCircleSectors();
+        this.hideCircleArrow();
       },
 
       createCircleTracker: function () {
@@ -857,6 +910,52 @@
         };
       },
 
+      applyGuideGeometry: function () {
+        const r = CONFIG.calibration.spokeExtent;
+        const diagLen = Math.sqrt(2) * (r * 2);
+
+        this.boardBackingEl.setAttribute('radius', CONFIG.calibration.boardBackingRadius);
+
+        this.hLine.setAttribute('geometry', 'width', r * 2);
+        this.hLine.setAttribute('geometry', 'height', CONFIG.calibration.lineThickness);
+
+        this.hLineHalo.setAttribute('geometry', 'width', r * 2);
+        this.hLineHalo.setAttribute('geometry', 'height', CONFIG.calibration.lineThickness * CONFIG.calibration.haloThicknessScale);
+
+        this.vLine.setAttribute('geometry', 'width', CONFIG.calibration.lineThickness);
+        this.vLine.setAttribute('geometry', 'height', r * 2);
+
+        this.vLineHalo.setAttribute('geometry', 'width', CONFIG.calibration.lineThickness * CONFIG.calibration.haloThicknessScale);
+        this.vLineHalo.setAttribute('geometry', 'height', r * 2);
+
+        this.diagA.setAttribute('geometry', 'width', diagLen);
+        this.diagA.setAttribute('geometry', 'height', CONFIG.calibration.diagThickness);
+
+        this.diagAHalo.setAttribute('geometry', 'width', diagLen);
+        this.diagAHalo.setAttribute('geometry', 'height', CONFIG.calibration.diagThickness * CONFIG.calibration.haloThicknessScale);
+
+        this.diagB.setAttribute('geometry', 'width', diagLen);
+        this.diagB.setAttribute('geometry', 'height', CONFIG.calibration.diagThickness);
+
+        this.diagBHalo.setAttribute('geometry', 'width', diagLen);
+        this.diagBHalo.setAttribute('geometry', 'height', CONFIG.calibration.diagThickness * CONFIG.calibration.haloThicknessScale);
+
+        const inner = CONFIG.calibration.innerRadius;
+        const outer = CONFIG.calibration.outerRadius;
+        const ringT = CONFIG.calibration.ringThickness;
+        const haloExtra = ringT * (CONFIG.calibration.haloThicknessScale - 1);
+
+        this.innerRing.setAttribute('radius-inner', inner - ringT);
+        this.innerRing.setAttribute('radius-outer', inner + ringT);
+        this.innerRingHalo.setAttribute('radius-inner', Math.max(0.01, inner - ringT - haloExtra));
+        this.innerRingHalo.setAttribute('radius-outer', inner + ringT + haloExtra);
+
+        this.outerRing.setAttribute('radius-inner', outer - ringT);
+        this.outerRing.setAttribute('radius-outer', outer + ringT);
+        this.outerRingHalo.setAttribute('radius-inner', Math.max(0.01, outer - ringT - haloExtra));
+        this.outerRingHalo.setAttribute('radius-outer', outer + ringT + haloExtra);
+      },
+
       repositionBoardToNeutral: function () {
         if (!this.cameraEl || !window.qNeutral) return;
         const headWorld = new THREE.Vector3();
@@ -875,11 +974,20 @@
 
       hideBoard: function () {
         this.boardEl.setAttribute('visible', 'false');
+        this.hideCircleArrow();
+        this.hideCircleSectors();
       },
 
       clearTraceDots: function () {
-        this.traceDots.forEach(el => el.parentNode && el.parentNode.removeChild(el));
-        this.traceDots = [];
+        if (this.traceLine) {
+          this.traceRoot.object3D.remove(this.traceLine);
+          this.traceGeometry.dispose();
+          this.traceMaterial.dispose();
+          this.traceLine = null;
+          this.traceGeometry = null;
+          this.traceMaterial = null;
+        }
+        this.tracePoints = [];
         this.lastTracePt = null;
       },
 
@@ -902,42 +1010,230 @@
         this.introHudEl.setAttribute('visible', 'false');
       },
 
+      setGuideMaterial: function (el, active) {
+        if (!el) return;
+        el.setAttribute(
+          'material',
+          active
+            ? `color: #dff8ff; emissive: #dff8ff; emissiveIntensity: ${CONFIG.calibration.guideEmissiveActive}; opacity: 0.95`
+            : `color: #7bdcff; emissive: #7bdcff; emissiveIntensity: ${CONFIG.calibration.guideEmissive}; opacity: ${CONFIG.calibration.guideOpacity}`
+        );
+      },
+
+      setHaloMaterial: function (el, active) {
+        if (!el) return;
+        el.setAttribute(
+          'material',
+          active
+            ? 'color: #dff8ff; emissive: #dff8ff; emissiveIntensity: 0.38; opacity: 0.28'
+            : `color: #7bdcff; emissive: #7bdcff; emissiveIntensity: 0.20; opacity: ${CONFIG.calibration.guideHaloOpacity}`
+        );
+      },
+
       setGuideHighlight: function (phase) {
-        this.hLine.setAttribute('material',
-          phase === CALIBRATION_PHASE.YAW
-            ? 'color: #dff8ff; emissive: #dff8ff; emissiveIntensity: 1.0; opacity: 0.95'
-            : 'color: #7bdcff; emissive: #7bdcff; emissiveIntensity: 0.35; opacity: 0.55'
-        );
+        const yawActive = phase === CALIBRATION_PHASE.YAW;
+        const pitchActive = phase === CALIBRATION_PHASE.PITCH;
+        const diagActive = phase === CALIBRATION_PHASE.DIAGONALS;
+        const circleActive =
+          phase === CALIBRATION_PHASE.CIRCLE_CW_PROMPT ||
+          phase === CALIBRATION_PHASE.CIRCLE_CW ||
+          phase === CALIBRATION_PHASE.CIRCLE_CCW_PROMPT ||
+          phase === CALIBRATION_PHASE.CIRCLE_CCW;
 
-        this.vLine.setAttribute('material',
-          phase === CALIBRATION_PHASE.PITCH
-            ? 'color: #dff8ff; emissive: #dff8ff; emissiveIntensity: 1.0; opacity: 0.95'
-            : 'color: #7bdcff; emissive: #7bdcff; emissiveIntensity: 0.35; opacity: 0.55'
-        );
+        this.setGuideMaterial(this.hLine, yawActive);
+        this.setHaloMaterial(this.hLineHalo, yawActive);
 
-        const diagMat =
-          phase === CALIBRATION_PHASE.DIAGONALS
-            ? 'color: #dff8ff; emissive: #dff8ff; emissiveIntensity: 0.95; opacity: 0.8'
-            : 'color: #7bdcff; emissive: #7bdcff; emissiveIntensity: 0.22; opacity: 0.35';
+        this.setGuideMaterial(this.vLine, pitchActive);
+        this.setHaloMaterial(this.vLineHalo, pitchActive);
 
-        this.diagA.setAttribute('material', diagMat);
-        this.diagB.setAttribute('material', diagMat);
+        this.setGuideMaterial(this.diagA, diagActive);
+        this.setGuideMaterial(this.diagB, diagActive);
+        this.setHaloMaterial(this.diagAHalo, diagActive);
+        this.setHaloMaterial(this.diagBHalo, diagActive);
 
-        const circleActive = phase === CALIBRATION_PHASE.CIRCLE_CW || phase === CALIBRATION_PHASE.CIRCLE_CCW;
-        this.innerRing.setAttribute('material',
+        this.innerRing.setAttribute(
+          'material',
           circleActive
-            ? 'color: #dff8ff; shader: flat; opacity: 0.92; side: double'
-            : 'color: #7bdcff; shader: flat; opacity: 0.55; side: double'
+            ? 'color: #dff8ff; shader: flat; opacity: 0.94; side: double'
+            : `color: #7bdcff; shader: flat; opacity: ${CONFIG.calibration.guideOpacity}; side: double`
         );
-        this.outerRing.setAttribute('material',
+
+        this.outerRing.setAttribute(
+          'material',
           circleActive
             ? 'color: #dff8ff; shader: flat; opacity: 0.98; side: double'
-            : 'color: #7bdcff; shader: flat; opacity: 0.65; side: double'
+            : 'color: #7bdcff; shader: flat; opacity: 0.86; side: double'
         );
+
+        this.innerRingHalo.setAttribute(
+          'material',
+          circleActive
+            ? 'color: #dff8ff; shader: flat; opacity: 0.26; side: double'
+            : `color: #7bdcff; shader: flat; opacity: ${CONFIG.calibration.guideHaloOpacity}; side: double`
+        );
+
+        this.outerRingHalo.setAttribute(
+          'material',
+          circleActive
+            ? 'color: #dff8ff; shader: flat; opacity: 0.26; side: double'
+            : `color: #7bdcff; shader: flat; opacity: ${CONFIG.calibration.guideHaloOpacity}; side: double`
+        );
+      },
+
+      showCircleArrow: function (direction) {
+        this.arrowDirection = direction;
+        this.arrowAngleDeg = 90;
+        this.lastArrowTime = performance.now();
+        this.circleArrowEl.setAttribute('visible', 'true');
+        this.updateCircleArrowVisual(0);
+      },
+
+      hideCircleArrow: function () {
+        this.arrowDirection = 0;
+        if (this.circleArrowEl) this.circleArrowEl.setAttribute('visible', 'false');
+      },
+
+      updateCircleArrowVisual: function (dtSec) {
+        if (!this.circleArrowEl || this.arrowDirection === 0) return;
+
+        this.arrowAngleDeg += this.arrowDirection * CONFIG.calibration.arrowSpeedDegPerSec * dtSec;
+
+        const a = deg2rad(this.arrowAngleDeg);
+        const r = CONFIG.calibration.arrowRadius;
+        const x = Math.cos(a) * r;
+        const y = Math.sin(a) * r;
+
+        this.circleArrowEl.object3D.position.set(x, y, 0.03);
+
+        const tangentDeg = this.arrowAngleDeg + (this.arrowDirection < 0 ? -90 : 90);
+        this.circleArrowEl.object3D.rotation.set(0, 0, deg2rad(tangentDeg));
+      },
+
+      clearCircleSectors: function () {
+        this.circleSectorEls.forEach(mesh => {
+          if (mesh.parent) mesh.parent.remove(mesh);
+          if (mesh.geometry) mesh.geometry.dispose();
+          if (mesh.material) mesh.material.dispose();
+        });
+        this.circleSectorEls = [];
+      },
+
+      buildCircleSectors: function () {
+        this.clearCircleSectors();
+
+        const group = this.circleSectorGroup;
+        if (!group) return;
+
+        const n = CONFIG.calibration.circleSectorCount;
+        const rInner = CONFIG.calibration.sectorFillInnerRadius;
+        const rOuter = CONFIG.calibration.sectorFillOuterRadius;
+
+        for (let i = 0; i < n; i++) {
+          const a0 = (i / n) * Math.PI * 2;
+          const a1 = ((i + 1) / n) * Math.PI * 2;
+
+          const geom = new THREE.BufferGeometry();
+
+          const p0i = new THREE.Vector3(Math.cos(a0) * rInner, Math.sin(a0) * rInner, 0);
+          const p0o = new THREE.Vector3(Math.cos(a0) * rOuter, Math.sin(a0) * rOuter, 0);
+          const p1i = new THREE.Vector3(Math.cos(a1) * rInner, Math.sin(a1) * rInner, 0);
+          const p1o = new THREE.Vector3(Math.cos(a1) * rOuter, Math.sin(a1) * rOuter, 0);
+
+          const verts = new Float32Array([
+            p0i.x, p0i.y, p0i.z,
+            p0o.x, p0o.y, p0o.z,
+            p1o.x, p1o.y, p1o.z,
+
+            p0i.x, p0i.y, p0i.z,
+            p1o.x, p1o.y, p1o.z,
+            p1i.x, p1i.y, p1i.z
+          ]);
+
+          geom.setAttribute('position', new THREE.BufferAttribute(verts, 3));
+          geom.computeVertexNormals();
+
+          const mat = new THREE.MeshBasicMaterial({
+            color: '#ffffff',
+            transparent: true,
+            opacity: 0.0,
+            side: THREE.DoubleSide,
+            depthWrite: false
+          });
+
+          const mesh = new THREE.Mesh(geom, mat);
+          group.object3D.add(mesh);
+          this.circleSectorEls.push(mesh);
+        }
+      },
+
+      hideCircleSectors: function () {
+        this.circleSectorEls.forEach(mesh => {
+          mesh.material.opacity = 0.0;
+          mesh.material.needsUpdate = true;
+        });
+      },
+
+      resetCircleSectors: function () {
+        this.hideCircleSectors();
+      },
+
+      setCircleSectorStyle: function (sectorIdx, color, activeOpacity) {
+        const mesh = this.circleSectorEls[sectorIdx];
+        if (!mesh) return;
+        mesh.material.color.set(color);
+        mesh.material.opacity = activeOpacity;
+        mesh.material.needsUpdate = true;
+      },
+
+      updateSectorFillFromTracker: function (tracker, phase) {
+        const color =
+          phase === CALIBRATION_PHASE.CIRCLE_CW
+            ? CONFIG.calibration.sectorFillColorCW
+            : CONFIG.calibration.sectorFillColorCCW;
+
+        tracker.visitedSectors.forEach((visited, idx) => {
+          if (visited) {
+            this.setCircleSectorStyle(idx, color, CONFIG.calibration.sectorFillOpacityActive);
+          } else {
+            const mesh = this.circleSectorEls[idx];
+            if (!mesh) return;
+            mesh.material.color.set(color);
+            mesh.material.opacity = CONFIG.calibration.sectorFillOpacity;
+            mesh.material.needsUpdate = true;
+          }
+        });
+      },
+
+      getSectorName: function (idx) {
+        const names = ['E', 'NE', 'N', 'NW', 'W', 'SW', 'S', 'SE'];
+        return names[idx % names.length];
+      },
+
+      getTraceColorForPhase: function (phase) {
+        if (phase === CALIBRATION_PHASE.YAW) return CONFIG.calibration.traceLineColorYaw;
+        if (phase === CALIBRATION_PHASE.PITCH) return CONFIG.calibration.traceLineColorPitch;
+        if (phase === CALIBRATION_PHASE.DIAGONALS) return CONFIG.calibration.traceLineColorDiagonal;
+        return '#ffffff';
+      },
+
+      startTraceLine: function (phase) {
+        const color = this.getTraceColorForPhase(phase);
+
+        this.tracePoints = [];
+        this.traceGeometry = new THREE.BufferGeometry();
+        this.traceMaterial = new THREE.LineBasicMaterial({
+          color,
+          transparent: true,
+          opacity: 0.95
+        });
+
+        this.traceLine = new THREE.Line(this.traceGeometry, this.traceMaterial);
+        this.traceRoot.object3D.add(this.traceLine);
       },
 
       startSession: function (isRetest = false) {
         this.clearTraceDots();
+        this.resetCircleSectors();
         this.session = this.createSession(isRetest);
         this.session.phase = CALIBRATION_PHASE.INTRO;
         this.session.phaseStartedAt = performance.now();
@@ -964,8 +1260,11 @@
 
         this.sceneElRef.removeEventListener('abuttondown', this._onAButton);
         this.hideIntroHud();
+        this.hideCircleArrow();
+        this.introHudEl.setAttribute('text', 'value', '');
         this.hideBoard();
         this.clearTraceDots();
+        this.resetCircleSectors();
         this.session.phase = CALIBRATION_PHASE.COMPLETE;
 
         const scene = getSceneEl();
@@ -1044,24 +1343,32 @@
         }
 
         if (this.session.phase === CALIBRATION_PHASE.DIAGONALS) {
-          this.session.phase = CALIBRATION_PHASE.CIRCLE_CW;
+          this.session.phase = CALIBRATION_PHASE.CIRCLE_CW_PROMPT;
           this.session.phaseStartedAt = performance.now();
           this.clearPhaseTracesForNextStage();
+          this.resetCircleSectors();
+          this.showIntroHud(CONFIG.calibration.circleCWPrompt);
           this.setGuideHighlight(CALIBRATION_PHASE.CIRCLE_CW);
-          ui.calStatus.textContent = this.session.isRetest ? 'Re-test calibration running: clockwise circle.' : 'Baseline calibration running: clockwise circle.';
+          this.showCircleArrow(-1);
+          ui.calStatus.textContent = 'Prepare: clockwise circle.';
           return;
         }
 
         if (this.session.phase === CALIBRATION_PHASE.CIRCLE_CW) {
-          this.session.phase = CALIBRATION_PHASE.CIRCLE_CCW;
+          this.session.phase = CALIBRATION_PHASE.CIRCLE_CCW_PROMPT;
           this.session.phaseStartedAt = performance.now();
           this.clearPhaseTracesForNextStage();
+          this.resetCircleSectors();
+          this.showIntroHud(CONFIG.calibration.circleCCWPrompt);
           this.setGuideHighlight(CALIBRATION_PHASE.CIRCLE_CCW);
-          ui.calStatus.textContent = this.session.isRetest ? 'Re-test calibration running: anticlockwise circle.' : 'Baseline calibration running: anticlockwise circle.';
+          this.showCircleArrow(1);
+          ui.calStatus.textContent = 'Prepare: anticlockwise circle.';
           return;
         }
 
         if (this.session.phase === CALIBRATION_PHASE.CIRCLE_CCW) {
+          this.hideCircleArrow();
+          this.hideCircleSectors();
           this.finishSession();
         }
       },
@@ -1107,12 +1414,6 @@
       },
 
       addTraceDotIfNeeded: function (pt, phase, yaw, pitch, roll, elapsedSec) {
-        let color = '#ffe27a';
-        if (phase === CALIBRATION_PHASE.PITCH) color = '#7afff0';
-        if (phase === CALIBRATION_PHASE.DIAGONALS) color = '#ff9cf0';
-        if (phase === CALIBRATION_PHASE.CIRCLE_CW) color = '#8ee8ff';
-        if (phase === CALIBRATION_PHASE.CIRCLE_CCW) color = '#ffd58e';
-
         if (this.lastTracePt) {
           const dx = pt.x - this.lastTracePt.x;
           const dy = pt.y - this.lastTracePt.y;
@@ -1120,20 +1421,36 @@
           if (dist < CONFIG.calibration.traceSampleMinDist) return;
         }
 
-        const dot = document.createElement('a-sphere');
-        dot.setAttribute('radius', '0.018');
-        dot.setAttribute('position', `${pt.x} ${pt.y} 0.01`);
-        dot.setAttribute('material', `color: ${color}; emissive: ${color}; emissiveIntensity: 0.85; opacity: 0.94`);
-        this.traceRoot.appendChild(dot);
-        this.traceDots.push(dot);
-
         const sample = { x: pt.x, y: pt.y, yaw, pitch, roll, t: elapsedSec };
 
-        if (phase === CALIBRATION_PHASE.YAW) this.session.traces.yaw.push(sample);
-        if (phase === CALIBRATION_PHASE.PITCH) this.session.traces.pitch.push(sample);
-        if (phase === CALIBRATION_PHASE.DIAGONALS) this.session.traces.diagonals.push(sample);
-        if (phase === CALIBRATION_PHASE.CIRCLE_CW) this.session.traces.circleCW.push(sample);
-        if (phase === CALIBRATION_PHASE.CIRCLE_CCW) this.session.traces.circleCCW.push(sample);
+        if (phase === CALIBRATION_PHASE.YAW) {
+          if (!this.traceLine) this.startTraceLine(phase);
+          this.tracePoints.push(new THREE.Vector3(pt.x, pt.y, 0.01));
+          this.traceGeometry.setFromPoints(this.tracePoints);
+          this.session.traces.yaw.push(sample);
+        }
+
+        if (phase === CALIBRATION_PHASE.PITCH) {
+          if (!this.traceLine) this.startTraceLine(phase);
+          this.tracePoints.push(new THREE.Vector3(pt.x, pt.y, 0.01));
+          this.traceGeometry.setFromPoints(this.tracePoints);
+          this.session.traces.pitch.push(sample);
+        }
+
+        if (phase === CALIBRATION_PHASE.DIAGONALS) {
+          if (!this.traceLine) this.startTraceLine(phase);
+          this.tracePoints.push(new THREE.Vector3(pt.x, pt.y, 0.01));
+          this.traceGeometry.setFromPoints(this.tracePoints);
+          this.session.traces.diagonals.push(sample);
+        }
+
+        if (phase === CALIBRATION_PHASE.CIRCLE_CW) {
+          this.session.traces.circleCW.push(sample);
+        }
+
+        if (phase === CALIBRATION_PHASE.CIRCLE_CCW) {
+          this.session.traces.circleCCW.push(sample);
+        }
 
         this.lastTracePt = { x: pt.x, y: pt.y };
       },
@@ -1212,8 +1529,46 @@
         const now = performance.now();
         const elapsedSec = (now - this.session.phaseStartedAt) / 1000;
 
+        const arrowDtSec = this.lastArrowTime ? Math.min((now - this.lastArrowTime) / 1000, 0.05) : 0;
+        this.lastArrowTime = now;
+
+        if (
+          this.session.phase === CALIBRATION_PHASE.CIRCLE_CW_PROMPT ||
+          this.session.phase === CALIBRATION_PHASE.CIRCLE_CW ||
+          this.session.phase === CALIBRATION_PHASE.CIRCLE_CCW_PROMPT ||
+          this.session.phase === CALIBRATION_PHASE.CIRCLE_CCW
+        ) {
+          this.updateCircleArrowVisual(arrowDtSec);
+        }
+
         if (this.session.phase === CALIBRATION_PHASE.INTRO) {
           if (elapsedSec >= CONFIG.calibration.introSec) this.advancePhase();
+          return;
+        }
+
+        if (this.session.phase === CALIBRATION_PHASE.CIRCLE_CW_PROMPT) {
+          if (elapsedSec >= CONFIG.calibration.circlePromptSec) {
+            this.hideIntroHud();
+            this.session.phase = CALIBRATION_PHASE.CIRCLE_CW;
+            this.session.phaseStartedAt = performance.now();
+            this.clearPhaseTracesForNextStage();
+            this.setGuideHighlight(CALIBRATION_PHASE.CIRCLE_CW);
+            this.showCircleArrow(-1);
+            ui.calStatus.textContent = 'Calibration running: clockwise circle.';
+          }
+          return;
+        }
+
+        if (this.session.phase === CALIBRATION_PHASE.CIRCLE_CCW_PROMPT) {
+          if (elapsedSec >= CONFIG.calibration.circlePromptSec) {
+            this.hideIntroHud();
+            this.session.phase = CALIBRATION_PHASE.CIRCLE_CCW;
+            this.session.phaseStartedAt = performance.now();
+            this.clearPhaseTracesForNextStage();
+            this.setGuideHighlight(CALIBRATION_PHASE.CIRCLE_CCW);
+            this.showCircleArrow(1);
+            ui.calStatus.textContent = 'Calibration running: anticlockwise circle.';
+          }
           return;
         }
 
@@ -1240,6 +1595,7 @@
 
         if (this.session.phase === CALIBRATION_PHASE.CIRCLE_CW) {
           this.updateCircleTracker(this.session.circleCW, pt, 'cw');
+          this.updateSectorFillFromTracker(this.session.circleCW, CALIBRATION_PHASE.CIRCLE_CW);
 
           if (this.session.circleCW.completed) {
             this.advancePhase();
@@ -1256,6 +1612,7 @@
 
         if (this.session.phase === CALIBRATION_PHASE.CIRCLE_CCW) {
           this.updateCircleTracker(this.session.circleCCW, pt, 'ccw');
+          this.updateSectorFillFromTracker(this.session.circleCCW, CALIBRATION_PHASE.CIRCLE_CCW);
 
           if (this.session.circleCCW.completed) {
             this.advancePhase();
@@ -1270,6 +1627,7 @@
         }
       }
     });
+
 
     AFRAME.registerComponent('pursuit3axis', {
       schema: {
@@ -2115,6 +2473,9 @@
         if (calComp) {
           calComp.hideBoard();
           calComp.hideIntroHud();
+          calComp.introHudEl.setAttribute('text', 'value', '');
+          calComp.hideCircleArrow();
+          calComp.hideCircleSectors();
           calComp.clearTraceDots();
         }
         ui.calStatus.textContent = 'Exited VR. Enter VR again before calibration or training.';
@@ -2155,34 +2516,92 @@
 
     <a-entity id="calibrationController" calibration-controller></a-entity>
 
+    
     <a-entity id="calBoard" visible="false">
-      <a-circle radius="1.2" segments="96"
-                material="color: #6fdcff; shader: flat; opacity: 0.06; side: double"
-                position="0 0 -0.004"></a-circle>
+      <a-circle id="calBoardBacking"
+                radius="1.28"
+                segments="128"
+                position="0 0 -0.01"
+                material="color: #cfd3d8; shader: flat; opacity: 1.0; side: double"></a-circle>
 
-      <a-ring id="calInnerRing" radius-inner="0.595" radius-outer="0.605"
-              material="color: #7bdcff; shader: flat; opacity: 0.55; side: double"></a-ring>
+      <a-ring id="calInnerRing"
+              radius-inner="0.572" radius-outer="0.628"
+              material="color: #7bdcff; shader: flat; opacity: 0.82; side: double"></a-ring>
 
-      <a-ring id="calOuterRing" radius-inner="1.195" radius-outer="1.205"
-              material="color: #7bdcff; shader: flat; opacity: 0.65; side: double"></a-ring>
+      <a-ring id="calInnerRingHalo"
+              radius-inner="0.54" radius-outer="0.66"
+              material="color: #7bdcff; shader: flat; opacity: 0.18; side: double"></a-ring>
+
+      <a-ring id="calOuterRing"
+              radius-inner="1.172" radius-outer="1.228"
+              material="color: #7bdcff; shader: flat; opacity: 0.86; side: double"></a-ring>
+
+      <a-ring id="calOuterRingHalo"
+              radius-inner="1.14" radius-outer="1.26"
+              material="color: #7bdcff; shader: flat; opacity: 0.18; side: double"></a-ring>
+
+      <a-entity id="calCircleSectorGroup" position="0 0 0.005"></a-entity>
 
       <a-entity id="calHLine"
-                geometry="primitive: box; width: 3.0; height: 0.012; depth: 0.005"
-                material="color: #7bdcff; emissive: #7bdcff; emissiveIntensity: 0.35; opacity: 0.55"></a-entity>
+                geometry="primitive: box; width: 3.0; height: 0.03; depth: 0.006"
+                material="color: #7bdcff; emissive: #7bdcff; emissiveIntensity: 0.55; opacity: 0.82"></a-entity>
+
+      <a-entity id="calHLineHalo"
+                geometry="primitive: box; width: 3.0; height: 0.066; depth: 0.004"
+                position="0 0 -0.002"
+                material="color: #7bdcff; emissive: #7bdcff; emissiveIntensity: 0.22; opacity: 0.18"></a-entity>
 
       <a-entity id="calVLine"
-                geometry="primitive: box; width: 0.012; height: 3.0; depth: 0.005"
-                material="color: #7bdcff; emissive: #7bdcff; emissiveIntensity: 0.35; opacity: 0.55"></a-entity>
+                geometry="primitive: box; width: 0.03; height: 3.0; depth: 0.006"
+                material="color: #7bdcff; emissive: #7bdcff; emissiveIntensity: 0.55; opacity: 0.82"></a-entity>
+
+      <a-entity id="calVLineHalo"
+                geometry="primitive: box; width: 0.066; height: 3.0; depth: 0.004"
+                position="0 0 -0.002"
+                material="color: #7bdcff; emissive: #7bdcff; emissiveIntensity: 0.22; opacity: 0.18"></a-entity>
 
       <a-entity id="calDiagA"
-                geometry="primitive: box; width: 2.12; height: 0.01; depth: 0.005"
+                geometry="primitive: box; width: 4.24; height: 0.026; depth: 0.006"
                 rotation="0 0 45"
-                material="color: #7bdcff; emissive: #7bdcff; emissiveIntensity: 0.22; opacity: 0.35"></a-entity>
+                material="color: #7bdcff; emissive: #7bdcff; emissiveIntensity: 0.55; opacity: 0.82"></a-entity>
+
+      <a-entity id="calDiagAHalo"
+                geometry="primitive: box; width: 4.24; height: 0.058; depth: 0.004"
+                position="0 0 -0.002"
+                rotation="0 0 45"
+                material="color: #7bdcff; emissive: #7bdcff; emissiveIntensity: 0.22; opacity: 0.18"></a-entity>
 
       <a-entity id="calDiagB"
-                geometry="primitive: box; width: 2.12; height: 0.01; depth: 0.005"
+                geometry="primitive: box; width: 4.24; height: 0.026; depth: 0.006"
                 rotation="0 0 -45"
-                material="color: #7bdcff; emissive: #7bdcff; emissiveIntensity: 0.22; opacity: 0.35"></a-entity>
+                material="color: #7bdcff; emissive: #7bdcff; emissiveIntensity: 0.55; opacity: 0.82"></a-entity>
+
+      <a-entity id="calDiagBHalo"
+                geometry="primitive: box; width: 4.24; height: 0.058; depth: 0.004"
+                position="0 0 -0.002"
+                rotation="0 0 -45"
+                material="color: #7bdcff; emissive: #7bdcff; emissiveIntensity: 0.22; opacity: 0.18"></a-entity>
+
+      <a-entity id="calCircleArrow" visible="false" position="0 0 0.03">
+        <a-cylinder
+          id="calArrowStem"
+          height="0.22"
+          radius="0.016"
+          rotation="0 0 90"
+          position="0 0 0"
+          material="color: #ffd27a; emissive: #ffd27a; emissiveIntensity: 1.0; opacity: 0.96"
+        ></a-cylinder>
+
+        <a-cone
+          id="calArrowHead"
+          height="0.10"
+          radius-bottom="0.05"
+          radius-top="0.0"
+          rotation="0 0 -90"
+          position="0.15 0 0"
+          material="color: #ffd27a; emissive: #ffd27a; emissiveIntensity: 1.0; opacity: 0.98"
+        ></a-cone>
+      </a-entity>
 
       <a-sphere radius="0.028"
                 material="color: #ffffff; emissive: #ffffff; emissiveIntensity: 1.0"></a-sphere>
@@ -2194,6 +2613,7 @@
       <a-entity id="calPromptText" visible="false" position="0 1.75 0"
                 text="value: ; align: center; width: 2.3; color: #FFFFFF"></a-entity>
     </a-entity>
+
 
     <a-entity
       id="calIntroHud"
