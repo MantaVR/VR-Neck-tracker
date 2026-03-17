@@ -306,8 +306,8 @@
         circleCCWPrompt: 'Now draw an anticlockwise circle.',
         promptDone: 'Calibration complete\nPress A on right controller to return.',
         traceSampleMinDist: 0.025,
-        boardBackingRadius: 1.28,
-        arrowRadius: 1.28,
+        boardBackingRadius: 2.05,
+        arrowRadius: 1.72,
         arrowSpeedDegPerSec: 55,
         lineThickness: 0.03,
         diagThickness: 0.026,
@@ -326,7 +326,10 @@
         sectorFillOpacity: 0.0,
         sectorFillOpacityActive: 0.52,
         sectorFillColorCW: '#8ee8ff',
-        sectorFillColorCCW: '#ffd58e'
+        sectorFillColorCCW: '#ffd58e',
+        sectorVisualCount: 48,
+        sectorBandHalfWidth: 0.09,
+        sectorBandMinThickness: 0.08
       }
     });
 
@@ -835,6 +838,7 @@
         this.traceRoot = document.querySelector('#calTraceRoot');
 
         this.boardBackingEl = document.querySelector('#calBoardBacking');
+        this.boardRimEl = document.querySelector('#calBoardRim');
         this.hLine = document.querySelector('#calHLine');
         this.vLine = document.querySelector('#calVLine');
         this.diagA = document.querySelector('#calDiagA');
@@ -881,6 +885,12 @@
           completed: false,
           timedOut: false,
           visitedSectors: Array(CONFIG.calibration.circleSectorCount).fill(false),
+          visualSectors: Array.from({ length: CONFIG.calibration.sectorVisualCount }, () => ({
+            visited: false,
+            minR: Infinity,
+            maxR: 0,
+            dirty: false
+          })),
           startAngleDeg: null,
           lastAngleDeg: null,
           directionScore: 0,
@@ -921,6 +931,12 @@
         const diagLen = Math.sqrt(2) * (r * 2);
 
         this.boardBackingEl.setAttribute('radius', CONFIG.calibration.boardBackingRadius);
+        if (this.boardRimEl) {
+          const rimOuter = CONFIG.calibration.boardBackingRadius;
+          const rimInner = Math.max(0.01, rimOuter - 0.08);
+          this.boardRimEl.setAttribute('radius-inner', rimInner);
+          this.boardRimEl.setAttribute('radius-outer', rimOuter);
+        }
 
         this.hLine.setAttribute('geometry', 'width', r * 2);
         this.hLine.setAttribute('geometry', 'height', CONFIG.calibration.lineThickness);
@@ -1126,39 +1142,44 @@
         this.circleSectorEls = [];
       },
 
+      buildAnnularSectorGeometry: function (a0, a1, rInner, rOuter) {
+        const geom = new THREE.BufferGeometry();
+
+        const p0i = new THREE.Vector3(Math.cos(a0) * rInner, Math.sin(a0) * rInner, 0);
+        const p0o = new THREE.Vector3(Math.cos(a0) * rOuter, Math.sin(a0) * rOuter, 0);
+        const p1i = new THREE.Vector3(Math.cos(a1) * rInner, Math.sin(a1) * rInner, 0);
+        const p1o = new THREE.Vector3(Math.cos(a1) * rOuter, Math.sin(a1) * rOuter, 0);
+
+        const verts = new Float32Array([
+          p0i.x, p0i.y, p0i.z,
+          p0o.x, p0o.y, p0o.z,
+          p1o.x, p1o.y, p1o.z,
+
+          p0i.x, p0i.y, p0i.z,
+          p1o.x, p1o.y, p1o.z,
+          p1i.x, p1i.y, p1i.z
+        ]);
+
+        geom.setAttribute('position', new THREE.BufferAttribute(verts, 3));
+        geom.computeVertexNormals();
+        return geom;
+      },
+
       buildCircleSectors: function () {
         this.clearCircleSectors();
 
         const group = this.circleSectorGroup;
         if (!group) return;
 
-        const n = CONFIG.calibration.circleSectorCount;
-        const rInner = CONFIG.calibration.sectorFillInnerRadius;
-        const rOuter = CONFIG.calibration.sectorFillOuterRadius;
+        const n = CONFIG.calibration.sectorVisualCount;
+        const baseInner = CONFIG.calibration.sectorFillInnerRadius;
+        const baseOuter = Math.max(baseInner + 0.02, baseInner + CONFIG.calibration.sectorBandMinThickness);
 
         for (let i = 0; i < n; i++) {
           const a0 = (i / n) * Math.PI * 2;
           const a1 = ((i + 1) / n) * Math.PI * 2;
 
-          const geom = new THREE.BufferGeometry();
-
-          const p0i = new THREE.Vector3(Math.cos(a0) * rInner, Math.sin(a0) * rInner, 0);
-          const p0o = new THREE.Vector3(Math.cos(a0) * rOuter, Math.sin(a0) * rOuter, 0);
-          const p1i = new THREE.Vector3(Math.cos(a1) * rInner, Math.sin(a1) * rInner, 0);
-          const p1o = new THREE.Vector3(Math.cos(a1) * rOuter, Math.sin(a1) * rOuter, 0);
-
-          const verts = new Float32Array([
-            p0i.x, p0i.y, p0i.z,
-            p0o.x, p0o.y, p0o.z,
-            p1o.x, p1o.y, p1o.z,
-
-            p0i.x, p0i.y, p0i.z,
-            p1o.x, p1o.y, p1o.z,
-            p1i.x, p1i.y, p1i.z
-          ]);
-
-          geom.setAttribute('position', new THREE.BufferAttribute(verts, 3));
-          geom.computeVertexNormals();
+          const geom = this.buildAnnularSectorGeometry(a0, a1, baseInner, baseOuter);
 
           const mat = new THREE.MeshBasicMaterial({
             color: '#ffffff',
@@ -1183,6 +1204,7 @@
 
       resetCircleSectors: function () {
         this.hideCircleSectors();
+        this.buildCircleSectors();
       },
 
       setCircleSectorStyle: function (sectorIdx, color, activeOpacity) {
@@ -1193,23 +1215,79 @@
         mesh.material.needsUpdate = true;
       },
 
+      getVisualSectorIndex: function (angleDeg) {
+        const n = CONFIG.calibration.sectorVisualCount;
+        return Math.floor((angleDeg / 360) * n) % n;
+      },
+
+      updateVisualSectorOccupancy: function (tracker, circleGeometry) {
+        const idx = this.getVisualSectorIndex(circleGeometry.angleDeg);
+        const bin = tracker.visualSectors[idx];
+        if (!bin) return;
+
+        const bandHalf = CONFIG.calibration.sectorBandHalfWidth;
+        const baseInner = CONFIG.calibration.sectorFillInnerRadius;
+        const baseOuter = CONFIG.calibration.sectorFillOuterRadius;
+        const minThickness = CONFIG.calibration.sectorBandMinThickness;
+
+        let rMin = Math.max(baseInner, circleGeometry.radius - bandHalf);
+        let rMax = Math.min(baseOuter, circleGeometry.radius + bandHalf);
+
+        if (rMax - rMin < minThickness) {
+          const mid = (rMin + rMax) * 0.5;
+          rMin = Math.max(baseInner, mid - minThickness * 0.5);
+          rMax = Math.min(baseOuter, mid + minThickness * 0.5);
+        }
+
+        if (!bin.visited) {
+          bin.visited = true;
+          bin.minR = rMin;
+          bin.maxR = rMax;
+          bin.dirty = true;
+          return;
+        }
+
+        const nextMin = Math.min(bin.minR, rMin);
+        const nextMax = Math.max(bin.maxR, rMax);
+        if (nextMin !== bin.minR || nextMax !== bin.maxR) {
+          bin.minR = nextMin;
+          bin.maxR = nextMax;
+          bin.dirty = true;
+        }
+      },
+
       updateSectorFillFromTracker: function (tracker, phase) {
         const color =
           phase === CALIBRATION_PHASE.CIRCLE_CW
             ? CONFIG.calibration.sectorFillColorCW
             : CONFIG.calibration.sectorFillColorCCW;
 
-        tracker.visitedSectors.forEach((visited, idx) => {
-          if (visited) {
-            this.setCircleSectorStyle(idx, color, CONFIG.calibration.sectorFillOpacityActive);
-          } else {
-            const mesh = this.circleSectorEls[idx];
-            if (!mesh) return;
-            mesh.material.color.set(color);
+        const n = CONFIG.calibration.sectorVisualCount;
+
+        for (let idx = 0; idx < n; idx++) {
+          const mesh = this.circleSectorEls[idx];
+          const bin = tracker.visualSectors[idx];
+          if (!mesh || !bin) continue;
+
+          mesh.material.color.set(color);
+
+          if (!bin.visited) {
             mesh.material.opacity = CONFIG.calibration.sectorFillOpacity;
             mesh.material.needsUpdate = true;
+            continue;
           }
-        });
+
+          if (bin.dirty) {
+            const a0 = (idx / n) * Math.PI * 2;
+            const a1 = ((idx + 1) / n) * Math.PI * 2;
+            if (mesh.geometry) mesh.geometry.dispose();
+            mesh.geometry = this.buildAnnularSectorGeometry(a0, a1, bin.minR, bin.maxR);
+            bin.dirty = false;
+          }
+
+          mesh.material.opacity = CONFIG.calibration.sectorFillOpacityActive;
+          mesh.material.needsUpdate = true;
+        }
       },
 
       getSectorName: function (idx) {
@@ -1589,6 +1667,7 @@
 
         const sector = this.getSectorIndex(g.angleDeg);
         tracker.visitedSectors[sector] = true;
+        this.updateVisualSectorOccupancy(tracker, g);
 
         if (tracker.startAngleDeg === null) {
           tracker.startAngleDeg = g.angleDeg;
@@ -2624,10 +2703,16 @@
     
     <a-entity id="calBoard" visible="false">
       <a-circle id="calBoardBacking"
-                radius="1.28"
+                radius="2.05"
                 segments="128"
                 position="0 0 -0.01"
                 material="color: #cfd3d8; shader: flat; opacity: 1.0; side: double"></a-circle>
+
+      <a-ring id="calBoardRim"
+              radius-inner="1.97" radius-outer="2.05"
+              segments-theta="128"
+              position="0 0 -0.009"
+              material="color: #9ea5ad; shader: flat; opacity: 1.0; side: double"></a-ring>
 
       <a-ring id="calInnerRing"
               radius-inner="0.572" radius-outer="0.628"
