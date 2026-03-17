@@ -285,11 +285,11 @@
       },
 
       calibration: {
-        boardDistance: 2.0,
-        innerRadius: 0.6,
-        outerRadius: 1.2,
-        maxRadius: 1.5,
-        spokeExtent: 1.5,
+        boardDistance: 2.1,
+        innerRadius: 0.8,
+        outerRadius: 1.6,
+        maxRadius: 2.1,
+        spokeExtent: 2.0,
         introSec: 10,
         yawSec: 10,
         pitchSec: 10,
@@ -321,8 +321,8 @@
         traceLineColorPitch: '#7afff0',
         traceLineColorDiagonal: '#ff9cf0',
         traceLineWidth: 0.055,
-        sectorFillInnerRadius: 0.6,
-        sectorFillOuterRadius: 1.2,
+        sectorFillInnerRadius: 0.8,
+        sectorFillOuterRadius: 1.6,
         sectorFillOpacity: 0.0,
         sectorFillOpacityActive: 0.52,
         sectorFillColorCW: '#8ee8ff',
@@ -397,6 +397,7 @@
       return el && el.components['calibration-controller'];
     }
     function getPursuitStarEl() { return document.querySelector('#star'); }
+    function setPursuitStarVisible(isVisible) { const star = getPursuitStarEl(); if (star) star.setAttribute('visible', isVisible ? 'true' : 'false'); }
     function isInVrMode() {
       const scene = getSceneEl();
       return !!(scene && scene.is && scene.is('vr-mode'));
@@ -652,6 +653,7 @@
       ui.btnRetest.disabled = true;
 
       if (appState.trainingMode === 'pursuit') {
+        setPursuitStarVisible(true);
         applyPursuitSettingsFromBaseline();
         resetPursuitStar();
 
@@ -659,6 +661,7 @@
         appState.trainingEndsAt = performance.now() + durationSec * 1000;
         ui.calStatus.textContent = `Pursuit running (${durationSec / 60} min).`;
       } else {
+        setPursuitStarVisible(false);
         appState.trainingEndsAt = Infinity;
         const traceController = getTraceController();
         if (traceController) traceController.startSession();
@@ -671,6 +674,7 @@
 
       appState.trainingActive = false;
       syncWindowState();
+      setPursuitStarVisible(false);
 
       const traceController = getTraceController();
       if (traceController) traceController.resetSession();
@@ -1285,6 +1289,10 @@
       },
 
       startSession: function (isRetest = false) {
+        if (this._autoExitTimer) {
+          clearTimeout(this._autoExitTimer);
+          this._autoExitTimer = null;
+        }
         this.clearTraceDots();
         this.resetCircleSectors();
         this.session = this.createSession(isRetest);
@@ -1331,11 +1339,21 @@
         this.showIntroHud(CONFIG.calibration.promptDone);
         this.session.phase = CALIBRATION_PHASE.WAIT_EXIT;
         this._attachWaitExitListeners();
+        if (this._autoExitTimer) clearTimeout(this._autoExitTimer);
+        this._autoExitTimer = setTimeout(() => {
+          if (this.session && this.session.phase === CALIBRATION_PHASE.WAIT_EXIT) {
+            this._onAButton();
+          }
+        }, CONFIG.calibration.promptDoneAutoExitSec * 1000);
       },
 
       _onAButton: function () {
         if (!this.session || this.session.phase !== CALIBRATION_PHASE.WAIT_EXIT) return;
 
+        if (this._autoExitTimer) {
+          clearTimeout(this._autoExitTimer);
+          this._autoExitTimer = null;
+        }
         this._detachWaitExitListeners();
         this._clearCompletionPrompt();
         this.hideCircleArrow();
@@ -2555,6 +2573,10 @@
         const calComp = getCalibrationController();
         if (calComp) {
           calComp.hideBoard();
+          if (calComp._autoExitTimer) {
+            clearTimeout(calComp._autoExitTimer);
+            calComp._autoExitTimer = null;
+          }
           calComp._detachWaitExitListeners();
           calComp._clearCompletionPrompt();
           calComp.hideCircleArrow();
@@ -2707,6 +2729,7 @@
 
     <a-entity
       id="star"
+      visible="false"
       pursuit3axis="mode: cycle; yawRangeDeg: 25; pitchRangeDeg: 15; rollRangeDeg: 10; distMin: 1.2; distMax: 2.2; speed: 0.20; jumpAmplitude: 0.7; arcBulge: 0.35;"
     >
       <a-sphere
