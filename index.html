@@ -214,9 +214,6 @@
   </div>
 
   <script>
-    // ----------------------------
-    // Small math / formatting utils
-    // ----------------------------
     const rad2deg = r => r * 180 / Math.PI;
     const deg2rad = d => d * Math.PI / 180;
     const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
@@ -233,10 +230,7 @@
       return { yaw: rad2deg(e.y), pitch: rad2deg(e.x), roll: rad2deg(e.z) };
     }
 
-    // ----------------------------
-    // App-level constants / config
-    // ----------------------------
-    const STORAGE_KEY = 'trainer_rom_v21';
+    const STORAGE_KEY = 'trainer_rom_v22';
 
     const CALIBRATION_PHASE = Object.freeze({
       IDLE: 'idle',
@@ -298,26 +292,18 @@
         yawSec: 10,
         pitchSec: 10,
         diagonalsSec: 20,
-        circleTimeoutSec: 20,
+        circleTimeoutSec: 40,
         circleMinRadius: 0.25,
         circleSectorCount: 8,
         circleReturnAngleDeg: 45,
         circleMinSectorCoverage: 7,
         circleMinProgressDeg: 270,
         introPrompt: 'Follow highlighted lines: horizontal, vertical, then diagonal and circle.',
-        promptYaw: 'Horizontal',
-        promptPitch: 'Vertical',
-        promptDiagonals: 'Diagonal',
-        promptCircleCW: 'Trace a clockwise circle.',
-        promptCircleCCW: 'Trace an anticlockwise circle.',
         promptDone: 'Calibration complete.\nPress A on right controller to return.',
         traceSampleMinDist: 0.025
       }
     });
 
-    // ----------------------------
-    // Shared app state
-    // ----------------------------
     function makeLegacySummaryFromCalibration(cal) {
       if (!cal) return null;
       return {
@@ -331,14 +317,11 @@
     const appState = {
       qNeutral: new THREE.Quaternion(),
       neutralCaptured: false,
-
       trainingActive: false,
       trainingMode: 'pursuit',
       trainingEndsAt: 0,
-
       baselineCalibration: null,
       retestCalibration: null,
-
       baseline: null,
       retest: null
     };
@@ -351,9 +334,6 @@
     }
     syncWindowState();
 
-    // ----------------------------
-    // Cached UI elements
-    // ----------------------------
     const ui = {
       trainPct: $('trainPct'),
       trainPctOut: $('trainPctOut'),
@@ -379,44 +359,23 @@
       jumpAmp: $('jumpAmp')
     };
 
-    // ----------------------------
-    // DOM / scene helpers
-    // ----------------------------
-    function getSceneEl() {
-      return document.querySelector('a-scene');
-    }
-
-    function getCameraEl() {
-      return document.querySelector('a-camera');
-    }
-
-    function getCameraObj() {
-      const cam = getCameraEl();
-      return cam ? cam.object3D : null;
-    }
-
+    function getSceneEl() { return document.querySelector('a-scene'); }
+    function getCameraEl() { return document.querySelector('a-camera'); }
+    function getCameraObj() { const cam = getCameraEl(); return cam ? cam.object3D : null; }
     function getTraceController() {
       const el = document.querySelector('#traceController');
       return el && el.components['curve-trace-controller'];
     }
-
     function getCalibrationController() {
       const el = document.querySelector('#calibrationController');
       return el && el.components['calibration-controller'];
     }
-
-    function getPursuitStarEl() {
-      return document.querySelector('#star');
-    }
-
+    function getPursuitStarEl() { return document.querySelector('#star'); }
     function isInVrMode() {
       const scene = getSceneEl();
       return !!(scene && scene.is && scene.is('vr-mode'));
     }
 
-    // ----------------------------
-    // Storage / persistence
-    // ----------------------------
     function saveCalibrationData() {
       localStorage.setItem(STORAGE_KEY, JSON.stringify({
         baselineCalibration: appState.baselineCalibration,
@@ -430,7 +389,6 @@
         if (!raw) return;
 
         const parsed = JSON.parse(raw);
-
         appState.baselineCalibration = parsed.baselineCalibration || null;
         appState.retestCalibration = parsed.retestCalibration || null;
         appState.baseline = makeLegacySummaryFromCalibration(appState.baselineCalibration);
@@ -468,9 +426,6 @@
       updateResultsUI();
     }
 
-    // ----------------------------
-    // UI rendering helpers
-    // ----------------------------
     function updateROMUI(romObj) {
       ui.romYaw.textContent = fmtDeg(romObj.yawROM || 0);
       ui.romPitch.textContent = fmtDeg(romObj.pitchROM || 0);
@@ -498,17 +453,10 @@
 
       if (baselineCal && !retestCal) {
         ui.results.innerHTML =
-          `<div>Baseline (${new Date(baselineCal.timestamp).toLocaleString()}): ` +
-          `Yaw ${fmtDeg(baselineCal.rom.yawROM)} | Pitch ${fmtDeg(baselineCal.rom.pitchROM)} | Roll ${fmtDeg(baselineCal.rom.rollROM)}</div>` +
-          `<div>Signed extrema: ` +
-          `L yaw ${fmtDeg(baselineCal.signedExtrema.leftYawMax)}, ` +
-          `R yaw ${fmtDeg(baselineCal.signedExtrema.rightYawMax)}, ` +
-          `Down pitch ${fmtDeg(baselineCal.signedExtrema.downPitchMax)}, ` +
-          `Up pitch ${fmtDeg(baselineCal.signedExtrema.upPitchMax)}</div>` +
+          `<div>Baseline (${new Date(baselineCal.timestamp).toLocaleString()}): Yaw ${fmtDeg(baselineCal.rom.yawROM)} | Pitch ${fmtDeg(baselineCal.rom.pitchROM)} | Roll ${fmtDeg(baselineCal.rom.rollROM)}</div>` +
+          `<div>Signed extrema: L yaw ${fmtDeg(baselineCal.signedExtrema.leftYawMax)}, R yaw ${fmtDeg(baselineCal.signedExtrema.rightYawMax)}, Down pitch ${fmtDeg(baselineCal.signedExtrema.downPitchMax)}, Up pitch ${fmtDeg(baselineCal.signedExtrema.upPitchMax)}</div>` +
           `<div>Circles: ${circleText(baselineCal)}</div>` +
-          (baselineCal.warnings?.length
-            ? `<div>Warnings: ${baselineCal.warnings.join(' | ')}</div>`
-            : `<div>No warnings.</div>`);
+          (baselineCal.warnings?.length ? `<div>Warnings: ${baselineCal.warnings.join(' | ')}</div>` : `<div>No warnings.</div>`);
         return;
       }
 
@@ -524,15 +472,10 @@
           `<div><b>Change:</b> Yaw ${sign(dYaw)}${fmtDeg(dYaw)} | Pitch ${sign(dPitch)}${fmtDeg(dPitch)} | Roll ${sign(dRoll)}${fmtDeg(dRoll)}</div>` +
           `<div>Baseline circles: ${circleText(baselineCal)}</div>` +
           `<div>Re-test circles: ${circleText(retestCal)}</div>` +
-          (retestCal.warnings?.length
-            ? `<div>Re-test warnings: ${retestCal.warnings.join(' | ')}</div>`
-            : `<div>No re-test warnings.</div>`);
+          (retestCal.warnings?.length ? `<div>Re-test warnings: ${retestCal.warnings.join(' | ')}</div>` : `<div>No re-test warnings.</div>`);
       }
     }
 
-    // ----------------------------
-    // Calibration save helper
-    // ----------------------------
     function applyCalibrationResult(result, isRetest) {
       if (isRetest) {
         appState.retestCalibration = result;
@@ -559,18 +502,11 @@
       }
     }
 
-    // ----------------------------
-    // Neutral / VR flow
-    // ----------------------------
     function toggleVr() {
       const scene = getSceneEl();
       if (!scene) return;
-
-      if (isInVrMode()) {
-        scene.exitVR && scene.exitVR();
-      } else {
-        scene.enterVR && scene.enterVR();
-      }
+      if (isInVrMode()) scene.exitVR && scene.exitVR();
+      else scene.enterVR && scene.enterVR();
     }
 
     function setNeutral() {
@@ -602,12 +538,10 @@
         ui.calStatus.textContent = 'Enter VR first to begin calibration.';
         return;
       }
-
       if (!appState.neutralCaptured) {
         ui.calStatus.textContent = 'Set neutral first.';
         return;
       }
-
       if (appState.trainingActive) {
         ui.calStatus.textContent = 'End training before calibration.';
         return;
@@ -625,9 +559,6 @@
       calComp.startSession(isRetest);
     }
 
-    // ----------------------------
-    // Pursuit mode wiring
-    // ----------------------------
     function applyPursuitSettingsFromBaseline() {
       const baseline = appState.baseline;
       if (!baseline) return;
@@ -670,20 +601,15 @@
       if (comp) comp._snapToInitial();
     }
 
-    // ----------------------------
-    // Training flow
-    // ----------------------------
     function startTraining() {
       if (!appState.baseline) {
         ui.calStatus.textContent = 'Please run baseline calibration first.';
         return;
       }
-
       if (!appState.neutralCaptured) {
         ui.calStatus.textContent = 'Please set neutral first.';
         return;
       }
-
       if (!isInVrMode()) {
         ui.calStatus.textContent = 'Enter VR first, then start training.';
         return;
@@ -691,7 +617,6 @@
 
       appState.trainingMode = ui.modeSelect.value;
       appState.trainingActive = true;
-
       syncWindowState();
 
       ui.btnStartTraining.disabled = true;
@@ -741,9 +666,6 @@
       if (appState.baseline) ui.btnRetest.disabled = false;
     }
 
-    // ----------------------------
-    // Per-frame app loop
-    // ----------------------------
     function rafLoop() {
       const camObj = getCameraObj();
 
@@ -754,20 +676,13 @@
         ui.liveRoll.textContent = fmt1(roll);
       }
 
-      if (
-        appState.trainingActive &&
-        appState.trainingMode === 'pursuit' &&
-        performance.now() >= appState.trainingEndsAt
-      ) {
+      if (appState.trainingActive && appState.trainingMode === 'pursuit' && performance.now() >= appState.trainingEndsAt) {
         endTraining('timer');
       }
 
       requestAnimationFrame(rafLoop);
     }
 
-    // ----------------------------
-    // A-Frame: background particles
-    // ----------------------------
     AFRAME.registerComponent('underwater-particles', {
       schema: {
         count: { type: 'int', default: 1600 },
@@ -775,20 +690,16 @@
         height: { type: 'number', default: 20 },
         size: { type: 'number', default: 0.05 }
       },
-
       init: function () {
         const d = this.data;
         const positions = new Float32Array(d.count * 3);
-
         for (let i = 0; i < d.count; i++) {
           positions[i * 3 + 0] = (Math.random() * 2 - 1) * d.radius;
           positions[i * 3 + 1] = Math.random() * d.height - 2;
           positions[i * 3 + 2] = (Math.random() * 2 - 1) * d.radius;
         }
-
         const geom = new THREE.BufferGeometry();
         geom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-
         const mat = new THREE.PointsMaterial({
           size: d.size,
           sizeAttenuation: true,
@@ -796,82 +707,57 @@
           transparent: true,
           opacity: 0.28
         });
-
         this.points = new THREE.Points(geom, mat);
         this.el.setObject3D('mesh', this.points);
       }
     });
 
-    // ----------------------------
-    // A-Frame: coral growth logic
-    // ----------------------------
     AFRAME.registerComponent('coral-growth', {
       init: function () {
         this.stage = 0;
         this.baseScales = [];
         this.branchEls = Array.from(this.el.querySelectorAll('.coralBranch'));
         this.glowEls = Array.from(this.el.querySelectorAll('.coralGlow'));
-
         this.el.object3D.scale.set(1.0, 1.0, 1.0);
-
-        this.branchEls.forEach(branch => {
-          this.baseScales.push(branch.object3D.scale.clone());
-        });
+        this.branchEls.forEach(branch => this.baseScales.push(branch.object3D.scale.clone()));
       },
-
       resetGrowth: function () {
         this.stage = 0;
         this.el.object3D.scale.set(1.0, 1.0, 1.0);
-
         this.branchEls.forEach((branch, i) => {
           const s = this.baseScales[i] || new THREE.Vector3(1, 1, 1);
           branch.object3D.scale.copy(s);
         });
-
         this.glowEls.forEach((g, idx) => {
           g.object3D.scale.set(1, 1, 1);
-          g.setAttribute(
-            'material',
-            `color: ${idx % 2 === 0 ? '#ff7ad6' : '#7afff0'}; emissive: ${idx % 2 === 0 ? '#ff7ad6' : '#7afff0'}; emissiveIntensity: 0.55; opacity: 0.96`
-          );
+          g.setAttribute('material', `color: ${idx % 2 === 0 ? '#ff7ad6' : '#7afff0'}; emissive: ${idx % 2 === 0 ? '#ff7ad6' : '#7afff0'}; emissiveIntensity: 0.55; opacity: 0.96`);
         });
       },
-
       grow: function () {
         this.stage = Math.min(10, this.stage + 1);
-
         const s = 1.0 + 0.24 * this.stage;
         this.el.object3D.scale.set(s * 0.96, s * 1.18, s * 0.96);
-
         this.branchEls.forEach((branch, i) => {
           const base = this.baseScales[i] || new THREE.Vector3(1, 1, 1);
           const multY = 1 + 0.10 * this.stage;
           const multXZ = 1 + 0.04 * this.stage;
           branch.object3D.scale.set(base.x * multXZ, base.y * multY, base.z * multXZ);
         });
-
         this.glowEls.forEach((g, idx) => {
           const glowScale = 1 + 0.08 * this.stage + idx * 0.02;
           g.object3D.scale.set(glowScale, glowScale, glowScale);
           const base = 0.55 + 0.14 * this.stage + idx * 0.05;
-          g.setAttribute(
-            'material',
-            `color: ${idx % 2 === 0 ? '#ff7ad6' : '#7afff0'}; emissive: ${idx % 2 === 0 ? '#ff7ad6' : '#7afff0'}; emissiveIntensity: ${base}; opacity: 0.96`
-          );
+          g.setAttribute('material', `color: ${idx % 2 === 0 ? '#ff7ad6' : '#7afff0'}; emissive: ${idx % 2 === 0 ? '#ff7ad6' : '#7afff0'}; emissiveIntensity: ${base}; opacity: 0.96`);
         });
       }
     });
 
-    // ----------------------------
-    // A-Frame: head-following HUD
-    // ----------------------------
     AFRAME.registerComponent('hud-follow', {
       schema: {
         distance: { type: 'number', default: 1.55 },
         height: { type: 'number', default: 0.28 },
         smoothing: { type: 'number', default: 0.12 }
       },
-
       init: function () {
         this.cameraEl = getCameraEl();
         this.targetPos = new THREE.Vector3();
@@ -879,22 +765,18 @@
         this.tempDir = new THREE.Vector3();
         this.started = false;
       },
-
       tick: function () {
         if (!this.cameraEl) return;
-
         const camObj = this.cameraEl.object3D;
         const camWorld = new THREE.Vector3();
         camObj.getWorldPosition(camWorld);
 
         this.tempDir.set(0, 0, -1).applyQuaternion(camObj.quaternion).normalize();
         this.tempDir.y = 0;
-
         if (this.tempDir.lengthSq() < 1e-6) this.tempDir.set(0, 0, -1);
         this.tempDir.normalize();
 
-        this.targetPos
-          .copy(camWorld)
+        this.targetPos.copy(camWorld)
           .add(this.tempDir.multiplyScalar(this.data.distance))
           .add(new THREE.Vector3(0, this.data.height, 0));
 
@@ -910,9 +792,6 @@
       }
     });
 
-    // ----------------------------
-    // A-Frame: calibration controller
-    // ----------------------------
     AFRAME.registerComponent('calibration-controller', {
       init: function () {
         this.cameraEl = getCameraEl();
@@ -980,19 +859,13 @@
 
       repositionBoardToNeutral: function () {
         if (!this.cameraEl || !window.qNeutral) return;
-
         const headWorld = new THREE.Vector3();
         this.cameraEl.object3D.getWorldPosition(headWorld);
 
-        const forward = new THREE.Vector3(0, 0, -1)
-          .applyQuaternion(window.qNeutral)
-          .normalize();
-
+        const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(window.qNeutral).normalize();
         const pos = headWorld.clone().add(forward.multiplyScalar(CONFIG.calibration.boardDistance));
         this.boardEl.object3D.position.copy(pos);
-
-        const lookAtPos = headWorld.clone();
-        this.boardEl.object3D.lookAt(lookAtPos);
+        this.boardEl.object3D.lookAt(headWorld.clone());
       },
 
       showBoard: function () {
@@ -1010,6 +883,10 @@
         this.lastTracePt = null;
       },
 
+      clearPhaseTracesForNextStage: function () {
+        this.clearTraceDots();
+      },
+
       showIntroHud: function (text) {
         this.introHudEl.setAttribute('visible', 'true');
         this.introHudEl.setAttribute('text', {
@@ -1025,20 +902,14 @@
         this.introHudEl.setAttribute('visible', 'false');
       },
 
-      setPrompt: function (text) {
-        this.promptEl.setAttribute('visible', 'false');
-      },
-
       setGuideHighlight: function (phase) {
-        this.hLine.setAttribute(
-          'material',
+        this.hLine.setAttribute('material',
           phase === CALIBRATION_PHASE.YAW
             ? 'color: #dff8ff; emissive: #dff8ff; emissiveIntensity: 1.0; opacity: 0.95'
             : 'color: #7bdcff; emissive: #7bdcff; emissiveIntensity: 0.35; opacity: 0.55'
         );
 
-        this.vLine.setAttribute(
-          'material',
+        this.vLine.setAttribute('material',
           phase === CALIBRATION_PHASE.PITCH
             ? 'color: #dff8ff; emissive: #dff8ff; emissiveIntensity: 1.0; opacity: 0.95'
             : 'color: #7bdcff; emissive: #7bdcff; emissiveIntensity: 0.35; opacity: 0.55'
@@ -1052,14 +923,14 @@
         this.diagA.setAttribute('material', diagMat);
         this.diagB.setAttribute('material', diagMat);
 
-        const ringMat =
-          (phase === CALIBRATION_PHASE.CIRCLE_CW || phase === CALIBRATION_PHASE.CIRCLE_CCW)
+        const circleActive = phase === CALIBRATION_PHASE.CIRCLE_CW || phase === CALIBRATION_PHASE.CIRCLE_CCW;
+        this.innerRing.setAttribute('material',
+          circleActive
             ? 'color: #dff8ff; shader: flat; opacity: 0.92; side: double'
-            : 'color: #7bdcff; shader: flat; opacity: 0.55; side: double';
-
-        this.innerRing.setAttribute('material', ringMat);
+            : 'color: #7bdcff; shader: flat; opacity: 0.55; side: double'
+        );
         this.outerRing.setAttribute('material',
-          (phase === CALIBRATION_PHASE.CIRCLE_CW || phase === CALIBRATION_PHASE.CIRCLE_CCW)
+          circleActive
             ? 'color: #dff8ff; shader: flat; opacity: 0.98; side: double'
             : 'color: #7bdcff; shader: flat; opacity: 0.65; side: double'
         );
@@ -1092,8 +963,9 @@
         if (!this.session || this.session.phase !== CALIBRATION_PHASE.WAIT_EXIT) return;
 
         this.sceneElRef.removeEventListener('abuttondown', this._onAButton);
-        this.hideBoard();
         this.hideIntroHud();
+        this.hideBoard();
+        this.clearTraceDots();
         this.session.phase = CALIBRATION_PHASE.COMPLETE;
 
         const scene = getSceneEl();
@@ -1147,50 +1019,45 @@
           this.session.phase = CALIBRATION_PHASE.YAW;
           this.session.phaseStartedAt = performance.now();
           this.hideIntroHud();
+          this.clearPhaseTracesForNextStage();
           this.setGuideHighlight(CALIBRATION_PHASE.YAW);
-          ui.calStatus.textContent = this.session.isRetest
-            ? 'Re-test calibration running: yaw.'
-            : 'Baseline calibration running: yaw.';
+          ui.calStatus.textContent = this.session.isRetest ? 'Re-test calibration running: yaw.' : 'Baseline calibration running: yaw.';
           return;
         }
 
         if (this.session.phase === CALIBRATION_PHASE.YAW) {
           this.session.phase = CALIBRATION_PHASE.PITCH;
           this.session.phaseStartedAt = performance.now();
+          this.clearPhaseTracesForNextStage();
           this.setGuideHighlight(CALIBRATION_PHASE.PITCH);
-          ui.calStatus.textContent = this.session.isRetest
-            ? 'Re-test calibration running: pitch.'
-            : 'Baseline calibration running: pitch.';
+          ui.calStatus.textContent = this.session.isRetest ? 'Re-test calibration running: pitch.' : 'Baseline calibration running: pitch.';
           return;
         }
 
         if (this.session.phase === CALIBRATION_PHASE.PITCH) {
           this.session.phase = CALIBRATION_PHASE.DIAGONALS;
           this.session.phaseStartedAt = performance.now();
+          this.clearPhaseTracesForNextStage();
           this.setGuideHighlight(CALIBRATION_PHASE.DIAGONALS);
-          ui.calStatus.textContent = this.session.isRetest
-            ? 'Re-test calibration running: diagonals.'
-            : 'Baseline calibration running: diagonals.';
+          ui.calStatus.textContent = this.session.isRetest ? 'Re-test calibration running: diagonals.' : 'Baseline calibration running: diagonals.';
           return;
         }
 
         if (this.session.phase === CALIBRATION_PHASE.DIAGONALS) {
           this.session.phase = CALIBRATION_PHASE.CIRCLE_CW;
           this.session.phaseStartedAt = performance.now();
+          this.clearPhaseTracesForNextStage();
           this.setGuideHighlight(CALIBRATION_PHASE.CIRCLE_CW);
-          ui.calStatus.textContent = this.session.isRetest
-            ? 'Re-test calibration running: clockwise circle.'
-            : 'Baseline calibration running: clockwise circle.';
+          ui.calStatus.textContent = this.session.isRetest ? 'Re-test calibration running: clockwise circle.' : 'Baseline calibration running: clockwise circle.';
           return;
         }
 
         if (this.session.phase === CALIBRATION_PHASE.CIRCLE_CW) {
           this.session.phase = CALIBRATION_PHASE.CIRCLE_CCW;
           this.session.phaseStartedAt = performance.now();
+          this.clearPhaseTracesForNextStage();
           this.setGuideHighlight(CALIBRATION_PHASE.CIRCLE_CCW);
-          ui.calStatus.textContent = this.session.isRetest
-            ? 'Re-test calibration running: anticlockwise circle.'
-            : 'Baseline calibration running: anticlockwise circle.';
+          ui.calStatus.textContent = this.session.isRetest ? 'Re-test calibration running: anticlockwise circle.' : 'Baseline calibration running: anticlockwise circle.';
           return;
         }
 
@@ -1201,7 +1068,6 @@
 
       updateSignedExtrema: function (yaw, pitch, roll) {
         const e = this.session.extrema;
-
         if (yaw < 0) e.leftYawMax = Math.max(e.leftYawMax, Math.abs(yaw));
         else e.rightYawMax = Math.max(e.rightYawMax, yaw);
 
@@ -1217,13 +1083,8 @@
         const outer = CONFIG.calibration.outerRadius;
         const maxR = CONFIG.calibration.maxRadius;
 
-        if (angleDegAbs <= 30) {
-          return inner * (angleDegAbs / 30);
-        }
-
-        if (angleDegAbs <= 60) {
-          return inner + (outer - inner) * ((angleDegAbs - 30) / 30);
-        }
+        if (angleDegAbs <= 30) return inner * (angleDegAbs / 30);
+        if (angleDegAbs <= 60) return inner + (outer - inner) * ((angleDegAbs - 30) / 30);
 
         const extra = Math.min(angleDegAbs, 90) - 60;
         return outer + (maxR - outer) * (extra / 30);
@@ -1266,14 +1127,7 @@
         this.traceRoot.appendChild(dot);
         this.traceDots.push(dot);
 
-        const sample = {
-          x: pt.x,
-          y: pt.y,
-          yaw,
-          pitch,
-          roll,
-          t: elapsedSec
-        };
+        const sample = { x: pt.x, y: pt.y, yaw, pitch, roll, t: elapsedSec };
 
         if (phase === CALIBRATION_PHASE.YAW) this.session.traces.yaw.push(sample);
         if (phase === CALIBRATION_PHASE.PITCH) this.session.traces.pitch.push(sample);
@@ -1312,16 +1166,6 @@
         return tracker.visitedSectors.reduce((a, b) => a + (b ? 1 : 0), 0);
       },
 
-      resetCircleTracker: function (tracker) {
-        tracker.completed = false;
-        tracker.timedOut = false;
-        tracker.visitedSectors = Array(CONFIG.calibration.circleSectorCount).fill(false);
-        tracker.startAngleDeg = null;
-        tracker.lastAngleDeg = null;
-        tracker.directionScore = 0;
-        tracker.totalAbsProgress = 0;
-      },
-
       updateCircleTracker: function (tracker, pt, directionMode) {
         const g = this.getCircleGeometry(pt);
         if (g.radius < CONFIG.calibration.circleMinRadius) return;
@@ -1358,7 +1202,7 @@
 
       tick: function () {
         if (!this.session) return;
-        if (this.session.phase === CALIBRATION_PHASE.IDLE || this.session.phase === CALIBRATION_PHASE.COMPLETE || this.session.phase === CALIBRATION_PHASE.WAIT_EXIT) return;
+        if ([CALIBRATION_PHASE.IDLE, CALIBRATION_PHASE.COMPLETE, CALIBRATION_PHASE.WAIT_EXIT].includes(this.session.phase)) return;
         if (!window.qNeutral || !appState.neutralCaptured) return;
         if (!isInVrMode()) return;
 
@@ -1369,17 +1213,12 @@
         const elapsedSec = (now - this.session.phaseStartedAt) / 1000;
 
         if (this.session.phase === CALIBRATION_PHASE.INTRO) {
-          if (elapsedSec >= CONFIG.calibration.introSec) {
-            this.advancePhase();
-          }
+          if (elapsedSec >= CONFIG.calibration.introSec) this.advancePhase();
           return;
         }
 
         const { yaw, pitch, roll } = getRelativeYPRDeg(camObj, appState.qNeutral);
-
-        this.session.currentAngles.yaw = yaw;
-        this.session.currentAngles.pitch = pitch;
-        this.session.currentAngles.roll = roll;
+        this.session.currentAngles = { yaw, pitch, roll };
 
         const pt = this.getBoardPointFromAngles(yaw, pitch);
         this.moveCursor(pt);
@@ -1390,12 +1229,10 @@
           this.advancePhase();
           return;
         }
-
         if (this.session.phase === CALIBRATION_PHASE.PITCH && elapsedSec >= CONFIG.calibration.pitchSec) {
           this.advancePhase();
           return;
         }
-
         if (this.session.phase === CALIBRATION_PHASE.DIAGONALS && elapsedSec >= CONFIG.calibration.diagonalsSec) {
           this.advancePhase();
           return;
@@ -1434,9 +1271,6 @@
       }
     });
 
-    // ----------------------------
-    // A-Frame: pursuit target motion
-    // ----------------------------
     AFRAME.registerComponent('pursuit3axis', {
       schema: {
         mode: { type: 'string', default: 'cycle' },
@@ -1463,14 +1297,11 @@
         this.path = null;
         this.pathT = 0;
         this.pathLen = 1;
-
         this.p0 = new THREE.Vector3();
         this.p1 = new THREE.Vector3();
         this.p2 = new THREE.Vector3();
-
         this.origin = new THREE.Vector3();
         this.cameraEl = getCameraEl();
-
         this._t = 0;
         this._hold = 0;
         this._mode = 'drift';
@@ -1479,14 +1310,11 @@
         this._cycle = this.data.cycleOrder.split(',').map(s => s.trim()).filter(Boolean);
         this._rollRad = 0;
         this._dist = 1.6;
-
         this._resolveMode(true);
         this._snapToInitial();
       },
 
-      _rand(a, b) {
-        return a + Math.random() * (b - a);
-      },
+      _rand(a, b) { return a + Math.random() * (b - a); },
 
       _pickEnvelopePoint(amp = 1.0) {
         const d = this.data;
@@ -1523,7 +1351,6 @@
       _resolveMode(forceReset) {
         const d = this.data;
         const requested = (d.mode || 'cycle').toLowerCase();
-
         if (requested === 'cycle') {
           if (forceReset || !this._cycleLeft || !this._cycle.length) {
             this._cycleIdx = this._cycleIdx % this._cycle.length;
@@ -1543,9 +1370,7 @@
       _advanceCycleIfNeeded(dt) {
         const d = this.data;
         if ((d.mode || 'cycle').toLowerCase() !== 'cycle') return;
-
         this._cycleLeft -= dt;
-
         if (this._cycleLeft <= 0) {
           this._cycleIdx = (this._cycleIdx + 1) % this._cycle.length;
           this._mode = this._cycle[this._cycleIdx] || 'drift';
@@ -1559,7 +1384,6 @@
 
       _buildArcTo(next) {
         const d = this.data;
-
         this.p0.copy(this.cur);
         this.p1.copy(next);
 
@@ -1569,9 +1393,7 @@
         const up = new THREE.Vector3(0, 1, 0);
         const dir = this.p1.clone().sub(this.p0).normalize();
         let perp = new THREE.Vector3().crossVectors(dir, up);
-
         if (perp.lengthSq() < 1e-6) perp = new THREE.Vector3(1, 0, 0);
-
         perp.normalize().multiplyScalar(segLen * clamp(d.arcBulge, 0.05, 0.9));
         this.p2.copy(mid).add(perp);
 
@@ -1583,7 +1405,6 @@
       _pickNewDest(snap) {
         const d = this.data;
         const amp = (this._mode === 'jumps') ? d.jumpAmplitude : 1.0;
-
         this._rollRad = deg2rad((Math.random() * 2 - 1) * d.rollRangeDeg);
 
         const next = this._applyRollAndNeutral(this._pickEnvelopePoint(amp), this._rollRad);
@@ -1593,7 +1414,6 @@
         if (snap) {
           this.cur.copy(this.dest);
           this._placeStar();
-
           const next2 = this._applyRollAndNeutral(this._pickEnvelopePoint(amp), this._rollRad);
           this.dest.copy(next2);
         }
@@ -1605,7 +1425,6 @@
         this._t = 0;
         this._hold = 0;
         this._newRollAndDist();
-
         this.cur.copy(this._applyRollAndNeutral(new THREE.Vector3(0, 0, -this._dist), 0));
         this._placeStar();
         this._pickNewDest(false);
@@ -1627,14 +1446,7 @@
           const rx = Math.tan(deg2rad(d.yawRangeDeg)) * this._dist;
           const ry = Math.tan(deg2rad(d.pitchRangeDeg)) * this._dist;
           const a = w * this._t;
-
-          this.cur.copy(
-            this._applyRollAndNeutral(
-              new THREE.Vector3(rx * Math.cos(a), ry * Math.sin(a), -this._dist),
-              this._rollRad
-            )
-          );
-
+          this.cur.copy(this._applyRollAndNeutral(new THREE.Vector3(rx * Math.cos(a), ry * Math.sin(a), -this._dist), this._rollRad));
           this._placeStar();
           return;
         }
@@ -1645,14 +1457,7 @@
           const rx = Math.tan(deg2rad(d.yawRangeDeg)) * this._dist;
           const ry = Math.tan(deg2rad(d.pitchRangeDeg)) * this._dist;
           const a = w * this._t;
-
-          this.cur.copy(
-            this._applyRollAndNeutral(
-              new THREE.Vector3(rx * Math.sin(a), ry * 0.5 * Math.sin(2 * a), -this._dist),
-              this._rollRad
-            )
-          );
-
+          this.cur.copy(this._applyRollAndNeutral(new THREE.Vector3(rx * Math.sin(a), ry * 0.5 * Math.sin(2 * a), -this._dist), this._rollRad));
           this._placeStar();
           return;
         }
@@ -1673,31 +1478,24 @@
       }
     });
 
-    // ----------------------------
-    // A-Frame: coral tracing controller
-    // ----------------------------
     AFRAME.registerComponent('curve-trace-controller', {
       init: function () {
         this.cameraEl = getCameraEl();
         this.sceneElRef = this.el.sceneEl;
-
         this.hudEl = document.querySelector('#traceHud');
         this.centerEl = document.querySelector('#traceCenter');
         this.startEl = document.querySelector('#traceStart');
         this.ballEl = document.querySelector('#traceBall');
         this.coralEl = document.querySelector('#centralCoral');
         this.holdTimerEl = document.querySelector('#holdTimerText');
-
         this.traceCfg = CONFIG.trace;
 
         this.curveLine = null;
         this.corridorPoints = [];
         this.curveLocal = [];
-
         this.coralBaseLocal = new THREE.Vector3(0, 0, -this.traceCfg.centerDistance);
         this.finishLocal = new THREE.Vector3(0, 0.04, -this.traceCfg.centerDistance);
         this.centerDistance = this.traceCfg.centerDistance;
-
         this.sessionOriginWorld = new THREE.Vector3();
 
         this.startAnchors = [];
@@ -1738,15 +1536,8 @@
         this.startAnchors = [];
         this.anchorOrder = [];
 
-        if (this._introTimer) {
-          clearTimeout(this._introTimer);
-          this._introTimer = null;
-        }
-
-        if (this._trialAdvanceTimer) {
-          clearTimeout(this._trialAdvanceTimer);
-          this._trialAdvanceTimer = null;
-        }
+        if (this._introTimer) { clearTimeout(this._introTimer); this._introTimer = null; }
+        if (this._trialAdvanceTimer) { clearTimeout(this._trialAdvanceTimer); this._trialAdvanceTimer = null; }
 
         this._clearCurveVisuals();
         this._clearAnchorIslands();
@@ -1754,7 +1545,6 @@
         this._detachControllerListeners();
 
         this.coralEl.setAttribute('position', '0 0 -8');
-
         const coralComp = this.coralEl.components['coral-growth'];
         if (coralComp) coralComp.resetGrowth();
       },
@@ -1780,7 +1570,6 @@
 
       startSession: function () {
         this.resetSession();
-
         const rom = appState.baseline;
         if (!rom || !window.qNeutral) return;
 
@@ -1788,7 +1577,6 @@
         this.coralBaseLocal.set(0, 0, -this.centerDistance);
 
         this.cameraEl.object3D.getWorldPosition(this.sessionOriginWorld);
-
         const coralWorld = this._localToWorld(this.coralBaseLocal);
         this.coralEl.setAttribute('position', `${coralWorld.x} ${coralWorld.y} ${coralWorld.z}`);
 
@@ -1797,7 +1585,6 @@
 
         this.startAnchors = this._generateStartAnchors(yawHalf, pitchHalf);
         this.anchorOrder = this._makeAnchorOrder(this.startAnchors.length).slice(0, this.traceCfg.anchorCountPerSession);
-
         this._createAnchorIslands();
 
         this.state = 'intro';
@@ -1813,10 +1600,7 @@
       },
 
       endSession: function () {
-        const avg = this.sessionScores.length
-          ? (this.sessionScores.reduce((a, b) => a + b, 0) / this.sessionScores.length)
-          : 0;
-
+        const avg = this.sessionScores.length ? (this.sessionScores.reduce((a, b) => a + b, 0) / this.sessionScores.length) : 0;
         const best = this.sessionScores.length ? Math.max(...this.sessionScores) : 0;
         const worst = this.sessionScores.length ? Math.min(...this.sessionScores) : 0;
 
@@ -1825,8 +1609,7 @@
         this._showHud(`Coral complete\nAvg ${avg.toFixed(1)}%  Best ${best.toFixed(1)}%  Worst ${worst.toFixed(1)}%\n\nPress trigger to return`);
         this._hideHoldTimer();
 
-        ui.calStatus.textContent =
-          `Coral tracing complete. Avg ${avg.toFixed(1)}%, best ${best.toFixed(1)}%, worst ${worst.toFixed(1)}%. Press trigger to return.`;
+        ui.calStatus.textContent = `Coral tracing complete. Avg ${avg.toFixed(1)}%, best ${best.toFixed(1)}%, worst ${worst.toFixed(1)}%. Press trigger to return.`;
       },
 
       _generateStartAnchors: function (yawHalf, pitchHalf) {
@@ -1872,18 +1655,15 @@
 
       _makeAnchorOrder: function (count) {
         const arr = Array.from({ length: count }, (_, i) => i);
-
         for (let i = arr.length - 1; i > 0; i--) {
           const j = Math.floor(Math.random() * (i + 1));
           [arr[i], arr[j]] = [arr[j], arr[i]];
         }
-
         return arr;
       },
 
       _createAnchorIslands: function () {
         this._clearAnchorIslands();
-
         this.startAnchors.forEach(anchor => {
           const local = this._localFromAngles(anchor.yawDeg, anchor.pitchDeg, this.centerDistance);
           const world = this._localToWorld(local);
@@ -1895,7 +1675,6 @@
           island.setAttribute('position', `${world.x} ${world.y} ${world.z}`);
           island.setAttribute('rotation', '90 0 0');
           island.setAttribute('material', 'color: #6f8fb8; emissive: #6f8fb8; emissiveIntensity: 0.18; opacity: 0.92');
-
           this.el.sceneEl.appendChild(island);
           this.anchorIslandEls.push(island);
         });
@@ -1909,8 +1688,7 @@
       _highlightActiveAnchor: function (activeIdx) {
         this.anchorIslandEls.forEach((el, i) => {
           const active = i === activeIdx;
-          el.setAttribute(
-            'material',
+          el.setAttribute('material',
             active
               ? 'color: #ffd27a; emissive: #ffd27a; emissiveIntensity: 0.95; opacity: 0.98'
               : 'color: #6f8fb8; emissive: #6f8fb8; emissiveIntensity: 0.18; opacity: 0.92'
@@ -1936,23 +1714,16 @@
         const headWorld = new THREE.Vector3();
         this.cameraEl.object3D.getWorldPosition(headWorld);
 
-        const gazeDir = new THREE.Vector3(0, 0, -1)
-          .applyQuaternion(this.cameraEl.object3D.quaternion)
-          .normalize();
-
+        const gazeDir = new THREE.Vector3(0, 0, -1).applyQuaternion(this.cameraEl.object3D.quaternion).normalize();
         const toTarget = targetWorld.clone().sub(headWorld).normalize();
         const dot = clamp(gazeDir.dot(toTarget), -1, 1);
-
         return rad2deg(Math.acos(dot));
       },
 
       _getViewPointOnPlane: function () {
         if (!window.qNeutral || !this.cameraEl) return null;
 
-        const fwdWorld = new THREE.Vector3(0, 0, -1)
-          .applyQuaternion(this.cameraEl.object3D.quaternion)
-          .normalize();
-
+        const fwdWorld = new THREE.Vector3(0, 0, -1).applyQuaternion(this.cameraEl.object3D.quaternion).normalize();
         const fwdLocal = fwdWorld.clone().applyQuaternion(window.qNeutral.clone().invert());
 
         if (Math.abs(fwdLocal.z) < 1e-4 || fwdLocal.z >= -1e-4) return null;
@@ -1977,18 +1748,13 @@
 
         const dx = x1 - x0;
         const dz = z1 - z0;
-
         const verticalDiff = y0 - y1;
         const absDiff = Math.abs(verticalDiff);
 
         const sTurn = 1 / 3;
         const xTurn = x0 + dx * sTurn;
         const zTurn = z0 + dz * sTurn;
-
-        const yTurn =
-          absDiff < 1e-5
-            ? y1
-            : y1 + Math.sign(verticalDiff) * (4 / 3) * absDiff;
+        const yTurn = absDiff < 1e-5 ? y1 : y1 + Math.sign(verticalDiff) * (4 / 3) * absDiff;
 
         const p0 = new THREE.Vector3(x0, y0, z0);
         const p1 = new THREE.Vector3(xTurn, yTurn, zTurn);
@@ -2021,7 +1787,6 @@
 
       _nextTrial: function () {
         this.trialIndex += 1;
-
         if (this.trialIndex >= this.traceCfg.anchorCountPerSession) {
           this.state = 'sessionComplete';
           this.endSession();
@@ -2040,16 +1805,10 @@
         this.finishReached = false;
         this.failFlashTimer = 0;
 
-        this.startLocal = this._localFromAngles(
-          this.currentTrialMeta.yawDeg,
-          this.currentTrialMeta.pitchDeg,
-          this.centerDistance
-        );
+        this.startLocal = this._localFromAngles(this.currentTrialMeta.yawDeg, this.currentTrialMeta.pitchDeg, this.centerDistance);
 
         const side = this.currentTrialMeta.yawDeg < 0 ? -1 : 1;
-        this.finishLocal = this.coralBaseLocal.clone().add(
-          new THREE.Vector3(side * this.traceCfg.finishOffsetX, 0.04, 0)
-        );
+        this.finishLocal = this.coralBaseLocal.clone().add(new THREE.Vector3(side * this.traceCfg.finishOffsetX, 0.04, 0));
 
         this.curveLocal = this._buildCurveLocal(this.startLocal, this.finishLocal);
 
@@ -2083,7 +1842,6 @@
 
         const lineColor = active ? '#45ffd7' : '#7cb8ff';
         const positions = [];
-
         for (const p of curveLocal) {
           const w = this._localToWorld(p);
           positions.push(w.x, w.y, w.z);
@@ -2110,8 +1868,7 @@
 
           const wp = this._localToWorld(curveLocal[i]);
           sphere.setAttribute('position', `${wp.x} ${wp.y} ${wp.z}`);
-          sphere.setAttribute(
-            'material',
+          sphere.setAttribute('material',
             `color: ${active ? '#45ffd7' : '#88bbff'}; opacity: 0.07; transparent: true; emissive: ${active ? '#45ffd7' : '#88bbff'}; emissiveIntensity: 0.18`
           );
 
@@ -2132,8 +1889,7 @@
           const opacity = ahead ? (nearBall ? 0.30 : 0.19) : 0.04;
           const emissiveIntensity = ahead ? (nearBall ? 0.72 : 0.30) : 0.08;
 
-          el.setAttribute(
-            'material',
+          el.setAttribute('material',
             `color: #45ffd7; opacity: ${opacity}; transparent: true; emissive: #45ffd7; emissiveIntensity: ${emissiveIntensity}`
           );
         });
@@ -2146,7 +1902,6 @@
           this.curveLine.material.dispose();
           this.curveLine = null;
         }
-
         this.corridorPoints.forEach(el => el.parentNode && el.parentNode.removeChild(el));
         this.corridorPoints = [];
       },
@@ -2234,7 +1989,6 @@
 
         if (this.state === 'holdStart') {
           const ang = this._gazeAngleToLocalTarget(this.startLocal);
-
           if (ang > this.traceCfg.startAngleTolDeg) {
             this.startHoldTime = 0;
             this.state = 'acquireStart';
@@ -2256,7 +2010,6 @@
             this._hideHoldTimer();
             this.state = 'traceActive';
           }
-
           return;
         }
 
@@ -2284,13 +2037,11 @@
             this.state = 'holdFinish';
             this.endHoldTime = 0;
           }
-
           return;
         }
 
         if (this.state === 'holdFinish') {
           const ang = this._gazeAngleToLocalTarget(this.finishLocal);
-
           if (ang > this.traceCfg.finishAngleTolDeg) {
             this.endHoldTime = 0;
             this.state = 'traceActive';
@@ -2336,9 +2087,6 @@
       }
     });
 
-    // ----------------------------
-    // UI events
-    // ----------------------------
     ui.trainPct.addEventListener('input', () => {
       ui.trainPctOut.textContent = `${ui.trainPct.value}%`;
     });
@@ -2352,9 +2100,6 @@
     ui.btnEndTraining.addEventListener('click', () => endTraining('manual'));
     ui.btnClear.addEventListener('click', clearSaved);
 
-    // ----------------------------
-    // Scene VR state listeners
-    // ----------------------------
     window.addEventListener('load', () => {
       const scene = getSceneEl();
       if (!scene) return;
@@ -2370,14 +2115,12 @@
         if (calComp) {
           calComp.hideBoard();
           calComp.hideIntroHud();
+          calComp.clearTraceDots();
         }
         ui.calStatus.textContent = 'Exited VR. Enter VR again before calibration or training.';
       });
     });
 
-    // ----------------------------
-    // Initial app boot
-    // ----------------------------
     ui.btnStartCal.disabled = true;
     loadSaved();
     updateResultsUI();
@@ -2412,7 +2155,6 @@
 
     <a-entity id="calibrationController" calibration-controller></a-entity>
 
-    <!-- Calibration board -->
     <a-entity id="calBoard" visible="false">
       <a-circle radius="1.2" segments="96"
                 material="color: #6fdcff; shader: flat; opacity: 0.06; side: double"
@@ -2449,7 +2191,6 @@
                 material="color: #ffe27a; emissive: #ffe27a; emissiveIntensity: 1.0"></a-sphere>
 
       <a-entity id="calTraceRoot"></a-entity>
-
       <a-entity id="calPromptText" visible="false" position="0 1.75 0"
                 text="value: ; align: center; width: 2.3; color: #FFFFFF"></a-entity>
     </a-entity>
