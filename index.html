@@ -270,6 +270,9 @@
         ballTolerance: 0.30,
         forwardRate: 0.19,
         rollbackRate: 0.045,
+        rollbackGrace: 0.02,
+        curveAssistTolerance: 0.38,
+        gazeProgressLookahead: 0.035,
         startAngleTolDeg: 4.5,
         finishAngleTolDeg: 9.5,
         failFlashSec: 0.16,
@@ -2354,6 +2357,29 @@
         return Math.sqrt(dx * dx + dy * dy);
       },
 
+      _getNearestCurveProgress: function (viewPointLocal) {
+        if (!this.curveLocal || !this.curveLocal.length) return 0;
+        let bestIdx = 0;
+        let bestDist = Infinity;
+
+        for (let i = 0; i < this.curveLocal.length; i++) {
+          const p = this.curveLocal[i];
+          const dx = viewPointLocal.x - p.x;
+          const dy = viewPointLocal.y - p.y;
+          const d2 = dx * dx + dy * dy;
+          if (d2 < bestDist) {
+            bestDist = d2;
+            bestIdx = i;
+          }
+        }
+
+        return {
+          progress: bestIdx / Math.max(1, this.curveLocal.length - 1),
+          distance: Math.sqrt(bestDist)
+        };
+      },
+
+
       _nextTrial: function () {
         this.trialIndex += 1;
         if (this.trialIndex >= this.traceCfg.anchorCountPerSession) {
@@ -2585,16 +2611,27 @@
         if (this.state === 'traceActive') {
           const ballLocal = this._curvePointAtProgress(this.ballProgress);
           const dToBall = this._distanceLocal2D(viewPointLocal, ballLocal);
-          const within = dToBall <= this.traceCfg.ballTolerance;
+          const nearest = this._getNearestCurveProgress(viewPointLocal);
+          const gazeProgress = clamp(nearest.progress + this.traceCfg.gazeProgressLookahead, 0, 1);
 
-          if (within) {
-            this.ballProgress = clamp(this.ballProgress + this.traceCfg.forwardRate * dt, 0, 1);
-            const norm = clamp(dToBall / this.traceCfg.ballTolerance, 0, 1);
-            const acc = 1 - Math.pow(norm, 1.4);
+          const nearPearl = dToBall <= this.traceCfg.ballTolerance;
+          const nearCurve = nearest.distance <= this.traceCfg.curveAssistTolerance;
+          const canAdvance = nearPearl || (nearCurve && gazeProgress >= this.ballProgress - this.traceCfg.rollbackGrace);
+
+          if (canAdvance) {
+            const progressGap = Math.max(0, gazeProgress - this.ballProgress);
+            this.ballProgress = clamp(Math.max(this.ballProgress, gazeProgress) + this.traceCfg.forwardRate * dt * 0.35, 0, 1);
+
+            const normToCurve = clamp(nearest.distance / this.traceCfg.curveAssistTolerance, 0, 1);
+            const normToBall = clamp(dToBall / this.traceCfg.ballTolerance, 0, 1);
+            const acc = nearPearl
+              ? 1 - Math.pow(normToBall, 1.4)
+              : 0.72 * (1 - Math.pow(normToCurve, 1.25));
             this.accuracySamples.push(acc);
             this._setBallNormal();
           } else {
-            this.ballProgress = clamp(this.ballProgress - this.traceCfg.rollbackRate * dt, 0, 1);
+            const rollbackFloor = Math.max(0, gazeProgress - this.traceCfg.rollbackGrace);
+            this.ballProgress = clamp(Math.max(rollbackFloor, this.ballProgress - this.traceCfg.rollbackRate * dt), 0, 1);
             this.failFlashTimer = this.traceCfg.failFlashSec;
             this._setBallFail();
           }
