@@ -1318,8 +1318,7 @@
           transparent: true,
           opacity: 0.92,
           side: THREE.DoubleSide,
-          depthWrite: false,
-          depthTest: false
+          depthWrite: false
         });
 
         this.traceLine = new THREE.Mesh(this.traceGeometry, this.traceMaterial);
@@ -1340,12 +1339,12 @@
         if (seg.lengthSq() < 1e-8) return;
 
         const normal = new THREE.Vector2(-seg.y, seg.x).normalize().multiplyScalar(width * 0.5);
-        const left = new THREE.Vector3(current.x + normal.x, current.y + normal.y, 0.04);
-        const right = new THREE.Vector3(current.x - normal.x, current.y - normal.y, 0.04);
+        const left = new THREE.Vector3(current.x + normal.x, current.y + normal.y, 0.01);
+        const right = new THREE.Vector3(current.x - normal.x, current.y - normal.y, 0.01);
 
         if (!this.tracePrevLeft || !this.tracePrevRight) {
-          const startLeft = new THREE.Vector3(prev.x + normal.x, prev.y + normal.y, 0.04);
-          const startRight = new THREE.Vector3(prev.x - normal.x, prev.y - normal.y, 0.04);
+          const startLeft = new THREE.Vector3(prev.x + normal.x, prev.y + normal.y, 0.01);
+          const startRight = new THREE.Vector3(prev.x - normal.x, prev.y - normal.y, 0.01);
           this.tracePrevLeft = startLeft;
           this.tracePrevRight = startRight;
         }
@@ -1442,7 +1441,27 @@
         this.summaryTextEl.setAttribute('text', 'value', '');
       },
 
-      _dismissWaitExit: function () {
+      _onWaitExitPress: function () {
+        if (!this.session || this.session.phase !== CALIBRATION_PHASE.WAIT_EXIT) return;
+        this._onAButton();
+      },
+
+      startWaitExit: function (result) {
+        applyCalibrationResult(result, this.session.isRetest);
+        this.hideBoard();
+        this._clearCompletionPrompt();
+        this.showSummaryHud(result);
+        this.session.phase = CALIBRATION_PHASE.WAIT_EXIT;
+        this._attachWaitExitListeners();
+        if (this._autoExitTimer) clearTimeout(this._autoExitTimer);
+        this._autoExitTimer = setTimeout(() => {
+          if (this.session && this.session.phase === CALIBRATION_PHASE.WAIT_EXIT) {
+            this._onAButton();
+          }
+        }, CONFIG.calibration.promptDoneAutoExitSec * 1000);
+      },
+
+      _onAButton: function () {
         if (!this.session || this.session.phase !== CALIBRATION_PHASE.WAIT_EXIT) return;
 
         if (this._autoExitTimer) {
@@ -1456,32 +1475,12 @@
         this.clearTraceDots();
         this.resetCircleSectors();
         this.session.phase = CALIBRATION_PHASE.COMPLETE;
-        ui.calStatus.textContent = 'Calibration complete. Still in VR — you can start training, retest, or exit VR manually.';
-      },
 
-      _onWaitExitPress: function () {
-        if (!this.session || this.session.phase !== CALIBRATION_PHASE.WAIT_EXIT) return;
-        this._dismissWaitExit();
-      },
-
-      startWaitExit: function (result) {
-        applyCalibrationResult(result, this.session.isRetest);
-        this.hideBoard();
-        this._clearCompletionPrompt();
-        this.showSummaryHud(result);
-        this.session.phase = CALIBRATION_PHASE.WAIT_EXIT;
-        this._attachWaitExitListeners();
-        if (this._autoExitTimer) clearTimeout(this._autoExitTimer);
-        this._autoExitTimer = setTimeout(() => {
-          if (this.session && this.session.phase === CALIBRATION_PHASE.WAIT_EXIT) {
-            this._dismissWaitExit();
-          }
-        }, CONFIG.calibration.promptDoneAutoExitSec * 1000);
-      },
-
-      _onAButton: function () {
-        if (!this.session || this.session.phase !== CALIBRATION_PHASE.WAIT_EXIT) return;
-        this._dismissWaitExit();
+        ui.calStatus.textContent = 'Calibration complete. Still in VR — start training, re-test, or exit VR manually.';
+        ui.btnSetNeutral.disabled = false;
+        ui.btnStartCal.disabled = false;
+        ui.btnStartTraining.disabled = !appState.baseline;
+        ui.btnRetest.disabled = !appState.baseline;
       },
 
       finishSession: function () {
@@ -1643,20 +1642,14 @@
         const sample = { x: pt.x, y: pt.y, yaw, pitch, roll, t: elapsedSec };
 
         if (phase === CALIBRATION_PHASE.YAW) {
-          if (!this.traceLine) this.startTraceLine(phase);
-          this.appendTraceRibbonPoint(pt);
           this.session.traces.yaw.push(sample);
         }
 
         if (phase === CALIBRATION_PHASE.PITCH) {
-          if (!this.traceLine) this.startTraceLine(phase);
-          this.appendTraceRibbonPoint(pt);
           this.session.traces.pitch.push(sample);
         }
 
         if (phase === CALIBRATION_PHASE.DIAGONALS) {
-          if (!this.traceLine) this.startTraceLine(phase);
-          this.appendTraceRibbonPoint(pt);
           this.session.traces.diagonals.push(sample);
         }
 
