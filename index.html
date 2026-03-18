@@ -287,9 +287,9 @@
       calibration: {
         boardDistance: 2.1,
         innerRadius: 0.8,
-        outerRadius: 2.2,
-        maxRadius: 3.7,
-        spokeExtent: 3.45,
+        outerRadius: 2.75,
+        maxRadius: 4.63,
+        spokeExtent: 4.31,
         introSec: 10,
         yawSec: 10,
         pitchSec: 10,
@@ -306,7 +306,7 @@
         circleCCWPrompt: 'Now draw an anticlockwise circle.',
         promptDone: 'Calibration complete\nPress A on right controller to return.',
         traceSampleMinDist: 0.025,
-        arrowRadius: 1.72,
+        arrowRadius: 2.15,
         arrowSpeedDegPerSec: 55,
         lineThickness: 0.03,
         diagThickness: 0.026,
@@ -321,7 +321,7 @@
         traceLineColorDiagonal: '#ff9cf0',
         traceLineWidth: 0.055,
         sectorFillInnerRadius: 0.35,
-        sectorFillOuterRadius: 3.55,
+        sectorFillOuterRadius: 4.45,
         sectorFillOpacity: 0.0,
         sectorFillOpacityActive: 0.52,
         sectorFillColorCW: '#8ee8ff',
@@ -1318,10 +1318,12 @@
           transparent: true,
           opacity: 0.92,
           side: THREE.DoubleSide,
-          depthWrite: false
+          depthWrite: false,
+          depthTest: false
         });
 
         this.traceLine = new THREE.Mesh(this.traceGeometry, this.traceMaterial);
+        this.traceLine.renderOrder = 999;
         this.traceRoot.object3D.add(this.traceLine);
       },
 
@@ -2297,15 +2299,28 @@
       _getViewPointOnPlane: function () {
         if (!window.qNeutral || !this.cameraEl) return null;
 
-        const fwdWorld = new THREE.Vector3(0, 0, -1).applyQuaternion(this.cameraEl.object3D.quaternion).normalize();
-        const fwdLocal = fwdWorld.clone().applyQuaternion(window.qNeutral.clone().invert());
+        const headWorld = new THREE.Vector3();
+        this.cameraEl.object3D.getWorldPosition(headWorld);
 
-        if (Math.abs(fwdLocal.z) < 1e-4 || fwdLocal.z >= -1e-4) return null;
+        const gazeDirWorld = new THREE.Vector3(0, 0, -1)
+          .applyQuaternion(this.cameraEl.object3D.quaternion)
+          .normalize();
 
-        const t = (-this.centerDistance) / fwdLocal.z;
+        const planePointWorld = this._localToWorld(new THREE.Vector3(0, 0, -this.centerDistance));
+        const planeNormalWorld = new THREE.Vector3(0, 0, 1)
+          .applyQuaternion(window.qNeutral)
+          .normalize();
+
+        const denom = gazeDirWorld.dot(planeNormalWorld);
+        if (Math.abs(denom) < 1e-5) return null;
+
+        const t = planePointWorld.clone().sub(headWorld).dot(planeNormalWorld) / denom;
         if (t <= 0) return null;
 
-        return fwdLocal.multiplyScalar(t);
+        const hitWorld = headWorld.clone().add(gazeDirWorld.multiplyScalar(t));
+        const hitLocal = hitWorld.clone().sub(this.sessionOriginWorld).applyQuaternion(window.qNeutral.clone().invert());
+
+        return hitLocal;
       },
 
       _buildCurveLocal: function (startLocal, finishLocal) {
@@ -2739,13 +2754,13 @@
     
     <a-entity id="calBoard" visible="false">
       <a-circle id="calBoardBacking"
-                radius="3.45"
+                radius="4.31"
                 segments="128"
                 position="0 0 -0.01"
                 material="color: #cfd3d8; shader: flat; opacity: 1.0; side: double"></a-circle>
 
       <a-ring id="calBoardRim"
-              radius-inner="3.37" radius-outer="3.45"
+              radius-inner="4.23" radius-outer="4.31"
               segments-theta="128"
               position="0 0 -0.009"
               material="color: #9ea5ad; shader: flat; opacity: 1.0; side: double"></a-ring>
