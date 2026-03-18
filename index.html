@@ -287,9 +287,9 @@
       calibration: {
         boardDistance: 2.1,
         innerRadius: 0.8,
-        outerRadius: 2.75,
-        maxRadius: 4.63,
-        spokeExtent: 4.31,
+        outerRadius: 2.2,
+        maxRadius: 3.7,
+        spokeExtent: 3.45,
         introSec: 10,
         yawSec: 10,
         pitchSec: 10,
@@ -306,7 +306,7 @@
         circleCCWPrompt: 'Now draw an anticlockwise circle.',
         promptDone: 'Calibration complete\nPress A on right controller to return.',
         traceSampleMinDist: 0.025,
-        arrowRadius: 2.15,
+        arrowRadius: 1.72,
         arrowSpeedDegPerSec: 55,
         lineThickness: 0.03,
         diagThickness: 0.026,
@@ -321,7 +321,7 @@
         traceLineColorDiagonal: '#ff9cf0',
         traceLineWidth: 0.055,
         sectorFillInnerRadius: 0.35,
-        sectorFillOuterRadius: 4.45,
+        sectorFillOuterRadius: 3.55,
         sectorFillOpacity: 0.0,
         sectorFillOpacityActive: 0.52,
         sectorFillColorCW: '#8ee8ff',
@@ -1323,7 +1323,6 @@
         });
 
         this.traceLine = new THREE.Mesh(this.traceGeometry, this.traceMaterial);
-        this.traceLine.renderOrder = 999;
         this.traceRoot.object3D.add(this.traceLine);
       },
 
@@ -1341,12 +1340,12 @@
         if (seg.lengthSq() < 1e-8) return;
 
         const normal = new THREE.Vector2(-seg.y, seg.x).normalize().multiplyScalar(width * 0.5);
-        const left = new THREE.Vector3(current.x + normal.x, current.y + normal.y, 0.01);
-        const right = new THREE.Vector3(current.x - normal.x, current.y - normal.y, 0.01);
+        const left = new THREE.Vector3(current.x + normal.x, current.y + normal.y, 0.04);
+        const right = new THREE.Vector3(current.x - normal.x, current.y - normal.y, 0.04);
 
         if (!this.tracePrevLeft || !this.tracePrevRight) {
-          const startLeft = new THREE.Vector3(prev.x + normal.x, prev.y + normal.y, 0.01);
-          const startRight = new THREE.Vector3(prev.x - normal.x, prev.y - normal.y, 0.01);
+          const startLeft = new THREE.Vector3(prev.x + normal.x, prev.y + normal.y, 0.04);
+          const startRight = new THREE.Vector3(prev.x - normal.x, prev.y - normal.y, 0.04);
           this.tracePrevLeft = startLeft;
           this.tracePrevRight = startRight;
         }
@@ -1443,27 +1442,7 @@
         this.summaryTextEl.setAttribute('text', 'value', '');
       },
 
-      _onWaitExitPress: function () {
-        if (!this.session || this.session.phase !== CALIBRATION_PHASE.WAIT_EXIT) return;
-        this._onAButton();
-      },
-
-      startWaitExit: function (result) {
-        applyCalibrationResult(result, this.session.isRetest);
-        this.hideBoard();
-        this._clearCompletionPrompt();
-        this.showSummaryHud(result);
-        this.session.phase = CALIBRATION_PHASE.WAIT_EXIT;
-        this._attachWaitExitListeners();
-        if (this._autoExitTimer) clearTimeout(this._autoExitTimer);
-        this._autoExitTimer = setTimeout(() => {
-          if (this.session && this.session.phase === CALIBRATION_PHASE.WAIT_EXIT) {
-            this._onAButton();
-          }
-        }, CONFIG.calibration.promptDoneAutoExitSec * 1000);
-      },
-
-      _onAButton: function () {
+      _dismissWaitExit: function () {
         if (!this.session || this.session.phase !== CALIBRATION_PHASE.WAIT_EXIT) return;
 
         if (this._autoExitTimer) {
@@ -1477,11 +1456,32 @@
         this.clearTraceDots();
         this.resetCircleSectors();
         this.session.phase = CALIBRATION_PHASE.COMPLETE;
+        ui.calStatus.textContent = 'Calibration complete. Still in VR — you can start training, retest, or exit VR manually.';
+      },
 
-        const scene = getSceneEl();
-        if (scene && scene.is && scene.is('vr-mode') && scene.exitVR) {
-          scene.exitVR();
-        }
+      _onWaitExitPress: function () {
+        if (!this.session || this.session.phase !== CALIBRATION_PHASE.WAIT_EXIT) return;
+        this._dismissWaitExit();
+      },
+
+      startWaitExit: function (result) {
+        applyCalibrationResult(result, this.session.isRetest);
+        this.hideBoard();
+        this._clearCompletionPrompt();
+        this.showSummaryHud(result);
+        this.session.phase = CALIBRATION_PHASE.WAIT_EXIT;
+        this._attachWaitExitListeners();
+        if (this._autoExitTimer) clearTimeout(this._autoExitTimer);
+        this._autoExitTimer = setTimeout(() => {
+          if (this.session && this.session.phase === CALIBRATION_PHASE.WAIT_EXIT) {
+            this._dismissWaitExit();
+          }
+        }, CONFIG.calibration.promptDoneAutoExitSec * 1000);
+      },
+
+      _onAButton: function () {
+        if (!this.session || this.session.phase !== CALIBRATION_PHASE.WAIT_EXIT) return;
+        this._dismissWaitExit();
       },
 
       finishSession: function () {
@@ -2299,28 +2299,15 @@
       _getViewPointOnPlane: function () {
         if (!window.qNeutral || !this.cameraEl) return null;
 
-        const headWorld = new THREE.Vector3();
-        this.cameraEl.object3D.getWorldPosition(headWorld);
+        const fwdWorld = new THREE.Vector3(0, 0, -1).applyQuaternion(this.cameraEl.object3D.quaternion).normalize();
+        const fwdLocal = fwdWorld.clone().applyQuaternion(window.qNeutral.clone().invert());
 
-        const gazeDirWorld = new THREE.Vector3(0, 0, -1)
-          .applyQuaternion(this.cameraEl.object3D.quaternion)
-          .normalize();
+        if (Math.abs(fwdLocal.z) < 1e-4 || fwdLocal.z >= -1e-4) return null;
 
-        const planePointWorld = this._localToWorld(new THREE.Vector3(0, 0, -this.centerDistance));
-        const planeNormalWorld = new THREE.Vector3(0, 0, 1)
-          .applyQuaternion(window.qNeutral)
-          .normalize();
-
-        const denom = gazeDirWorld.dot(planeNormalWorld);
-        if (Math.abs(denom) < 1e-5) return null;
-
-        const t = planePointWorld.clone().sub(headWorld).dot(planeNormalWorld) / denom;
+        const t = (-this.centerDistance) / fwdLocal.z;
         if (t <= 0) return null;
 
-        const hitWorld = headWorld.clone().add(gazeDirWorld.multiplyScalar(t));
-        const hitLocal = hitWorld.clone().sub(this.sessionOriginWorld).applyQuaternion(window.qNeutral.clone().invert());
-
-        return hitLocal;
+        return fwdLocal.multiplyScalar(t);
       },
 
       _buildCurveLocal: function (startLocal, finishLocal) {
@@ -2754,13 +2741,13 @@
     
     <a-entity id="calBoard" visible="false">
       <a-circle id="calBoardBacking"
-                radius="4.31"
+                radius="3.45"
                 segments="128"
                 position="0 0 -0.01"
                 material="color: #cfd3d8; shader: flat; opacity: 1.0; side: double"></a-circle>
 
       <a-ring id="calBoardRim"
-              radius-inner="4.23" radius-outer="4.31"
+              radius-inner="3.37" radius-outer="3.45"
               segments-theta="128"
               position="0 0 -0.009"
               material="color: #9ea5ad; shader: flat; opacity: 1.0; side: double"></a-ring>
